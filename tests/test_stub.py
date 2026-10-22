@@ -64,3 +64,10 @@ def test_gap_guide_cites_adjacent_only():
 def test_gap_guide_rejects_met():
     req = {"requirements": [{"id": "r1", "type": "required", "text": "Java", "verdict": "met"}]}
     assert c.post("/gap-guide", json=req).status_code == 422
+
+
+def test_split_needs_feedback():
+    base = {"mode": "split", "raw_text": "결제 API 개선"}
+    assert c.post("/restructure", json=base).status_code == 422
+    assert c.post("/restructure", json=base | {"feedback": "  "}).status_code == 422
+    assert c.post("/restructure", json=base | {"feedback": "사례를 하나로 합쳐 주세요"}).status_code == 200

@@ -1,7 +1,7 @@
 """API ↔ AI 요청·응답 모델 (기획서 4.3, 5.5 기준). 계약 C-04 초안의 출처."""
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Meta(BaseModel):
@@ -43,6 +43,13 @@ class RestructureRequest(BaseModel):
     target_episode_id: str | None = None  # episode 모드에서 고칠 사례
     answers: list[QA] = []
     feedback: str | None = None
+
+    @model_validator(mode="after")
+    def split_needs_feedback(self):
+        # 다시 나누기는 피드백 없이 누를 수 없다 (기획서 F2). 원문을 고친 뒤 새로 나누기는 initial
+        if self.mode == "split" and not (self.feedback and self.feedback.strip()):
+            raise ValueError("mode=split 은 feedback 이 필요함")
+        return self
 
 
 class RestructureResponse(Meta):
