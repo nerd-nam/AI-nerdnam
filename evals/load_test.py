@@ -108,7 +108,7 @@ async def level(n: int, rounds: int, ai: httpx.AsyncClient):
 async def main(levels, rounds, ai_url):
     async with httpx.AsyncClient(base_url=ai_url, timeout=60) as ai:
         health = (await ai.get("/health")).json()
-        if health.get("models") != "ready":
+        if set(health.get("models", {}).values()) != {"ready"}:
             raise SystemExit(f"AI 서버가 준비되지 않음: {health}")
         await call_llm(ai)  # 예열
         for n in levels:

@@ -11,8 +11,8 @@ API 서버만 호출하는 내부 AI 서버 (FastAPI, 상태 없음). 기획서 
 
 | 모드 | 언제 | 동작 |
 | --- | --- | --- |
-| `stub` (기본) | 로컬 개발, BE 연동 개발 | 모든 엔드포인트가 가짜 응답. `/health` → `models: "stub"` |
-| `real` | GPU 서버 | 시작하면 임베딩 로딩 → 예열 → `models: "ready"`. 그 전엔 `loading`, 실패하면 `error` |
+| `stub` (기본) | 로컬 개발, BE 연동 개발 | 모든 엔드포인트가 가짜 응답. `/health` → `models: {"llm": "stub", "embedding": "stub"}` |
+| `real` | GPU 서버 | 시작하면 모델별로 로딩 → 예열 → `ready`. 그 전엔 `loading`, 실패하면 `error`. BE는 모두 `ready`일 때만 재처리 |
 
 ### 로컬 (stub)
 
@@ -26,7 +26,7 @@ uv run uvicorn app.main:app --reload --port 8000   # http://localhost:8000/docs
 
 ```bash
 docker compose up -d --build        # vllm 이 healthy가 된 뒤 ai 가 시작됨
-curl localhost:8000/health          # models 가 ready 가 될 때까지 대기
+curl localhost:8000/health          # models 의 llm·embedding 이 모두 ready 가 될 때까지 대기
 ```
 
 - 기본값은 T4(g4dn.xlarge). L4(g6)는 `LLM_DTYPE=auto EMBED_DTYPE=bfloat16 docker compose up -d`

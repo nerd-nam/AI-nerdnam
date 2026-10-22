@@ -6,7 +6,7 @@ c = TestClient(app)
 
 
 def test_health():
-    assert c.get("/health").json() == {"status": "ok", "models": "stub"}
+    assert c.get("/health").json() == {"status": "ok", "models": {"llm": "stub", "embedding": "stub"}}
 
 
 def test_restructure():
