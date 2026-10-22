@@ -41,3 +41,11 @@ def test_guide_sse():
 
 def test_bad_request_is_422():
     assert c.post("/embed", json={"purpose": "query", "items": []}).status_code == 422
+
+
+def test_embed_prefix():
+    from app.embedding import fmt
+    assert fmt("query", "Kafka") == "task: search result | query: Kafka"
+    assert fmt("document", "본문", "제목") == "title: 제목 | text: 본문"
+    assert fmt("document", "본문") == "title: none | text: 본문"
+
