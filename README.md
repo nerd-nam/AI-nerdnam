@@ -1,6 +1,6 @@
 # nerdnam-ai
 
-API 서버만 호출하는 내부 AI 서버 (FastAPI, 상태 없음). 기획서 5.5의 엔드포인트 5개와 `/health`.
+API 서버만 호출하는 내부 AI 서버 (FastAPI, 상태 없음). 기획서 5.5의 엔드포인트 6개와 `/health`.
 
 | 모델 | 용도 | 서빙 |
 | --- | --- | --- |
@@ -49,7 +49,7 @@ uv run python -m evals.load_test
 | 경로 | 내용 |
 | --- | --- |
 | `app/schemas.py` | 요청·응답 모델. 계약 C-04 초안의 출처 (`/openapi.json`) |
-| `app/routers/` | restructure, requirements, embed, match, guide |
+| `app/routers/` | restructure, requirements, embed, match, gap_guide, guide |
 | `app/config.py` | 환경변수 (`AI_MODE`, `LLM_MODEL`, `VLLM_URL`, `EMBED_*`) |
 | `app/embedding.py` | 임베딩 로딩·접두어 규칙 (서버와 evals가 같이 씀) |
 | `app/llm.py` | vLLM 호출 (thinking 끔, JSON 스키마 강제) |

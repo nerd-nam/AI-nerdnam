@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from app import embedding, llm, state
 from app.config import AI_MODE
-from app.routers import embed, guide, match, requirements, restructure
+from app.routers import embed, gap_guide, guide, match, requirements, restructure
 
 log = logging.getLogger("uvicorn.error")
 
@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="nerdnam-ai", version="0.1.0", lifespan=lifespan)
 
-for r in (restructure, requirements, embed, match, guide):
+for r in (restructure, requirements, embed, match, gap_guide, guide):
     app.include_router(r.router)
 
 

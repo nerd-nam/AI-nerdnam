@@ -49,3 +49,18 @@ def test_embed_prefix():
     assert fmt("document", "본문", "제목") == "title: 제목 | text: 본문"
     assert fmt("document", "본문") == "title: none | text: 본문"
 
+
+def test_gap_guide_cites_adjacent_only():
+    req = {"requirements": [
+        {"id": "r1", "type": "required", "text": "iOS 개발", "verdict": "unmet",
+         "adjacent": [{"chunk_id": "c9", "text": "React Native 앱"}]},
+        {"id": "r2", "type": "preferred", "text": "TDD", "verdict": "partial"},
+    ], "duties": ["결제 API 개발"]}
+    r = c.post("/gap-guide", json=req).json()
+    assert [x["evidence_chunk_ids"] for x in r["results"]] == [["c9"], []]
+    assert r["model"] and r["prompt_version"]
+
+
+def test_gap_guide_rejects_met():
+    req = {"requirements": [{"id": "r1", "type": "required", "text": "Java", "verdict": "met"}]}
+    assert c.post("/gap-guide", json=req).status_code == 422

@@ -118,6 +118,31 @@ class MatchResponse(Meta):
     results: list[MatchResult]
 
 
+# ── /gap-guide (P6, ADR-0003) ─────────────────────
+class GapRequirement(BaseModel):
+    id: str
+    type: Literal["required", "preferred"]
+    text: str
+    verdict: Literal["partial", "unmet"]  # 충족(met)은 보내지 않는다
+    adjacent: list[Chunk] = []  # /match 에서 뽑히지 못한 후보 경험 (인접 경험)
+
+
+class GapGuideRequest(BaseModel):
+    requirements: list[GapRequirement] = Field(min_length=1)
+    duties: list[str] = []  # 공고 주요 업무
+
+
+class GapGuideResult(BaseModel):
+    requirement_id: str
+    guide: str  # 가이드 문장
+    avoid: str  # 하지 말 것 문장
+    evidence_chunk_ids: list[str]  # 인용한 인접 경험. 입력의 adjacent 안에서만
+
+
+class GapGuideResponse(Meta):
+    results: list[GapGuideResult]
+
+
 # ── /guide (P4·P5, SSE) ───────────────────────────
 GuideTab = Literal["motive", "intro", "portfolio", "career", "image"]  # FE routes.ts 와 동일
 
