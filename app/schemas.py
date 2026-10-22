@@ -81,7 +81,8 @@ class EmbedRequest(BaseModel):
     items: list[EmbedItem] = Field(min_length=1)
 
 
-class EmbedResponse(Meta):
+class EmbedResponse(BaseModel):
+    embedding_model: str  # 청크마다 저장해 재임베딩 대상을 찾는 데 씀 (기획서 4.4·5.5). 가짜 응답이면 "stub"
     dim: int
     vectors: list[list[float]]
 

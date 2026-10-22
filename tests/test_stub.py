@@ -24,7 +24,7 @@ def test_extract_keeps_ids():
 def test_embed_dim():
     r = c.post("/embed", json={"purpose": "query", "items": [{"text": "Kafka"}, {"text": "Redis"}]}).json()
     assert r["dim"] == 768 and len(r["vectors"]) == 2 and len(r["vectors"][0]) == 768
-    assert r["model"] == "stub"  # 가짜 벡터가 실제 모델 이름으로 저장되지 않게
+    assert r["embedding_model"] == "stub"  # 가짜 벡터가 실제 모델 이름으로 저장되지 않게
 
 
 def test_match_evidence_from_candidates():
