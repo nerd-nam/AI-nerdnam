@@ -6,6 +6,7 @@ AI_MODE = os.getenv("AI_MODE", "stub")
 # LLM (vLLM). 응답에 담는 모델 이름이기도 하다 (기획서 5.5)
 LLM_MODEL = os.getenv("LLM_MODEL", "Qwen/Qwen3.5-4B")
 VLLM_URL = os.getenv("VLLM_URL", "http://localhost:8001")
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))  # 읽기 제한(초). 로컬 Mac은 느려서 늘린다 (.env.local.example)
 
 # 임베딩. revision을 고정한다: 바꾸면 저장된 벡터를 전부 다시 계산해야 함 (ADR-0001, 2026-10-22 평가·검증한 버전)
 EMBED_REPO = os.getenv("EMBED_REPO", "google/embeddinggemma-2")
