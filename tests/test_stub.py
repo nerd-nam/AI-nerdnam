@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -40,6 +41,23 @@ def test_guide_json():
     r = c.post("/guide", json=req)
     assert r.headers["content-type"] == "application/json"  # SSE 아님 (기획서 v1.23)
     assert r.json()["cited_chunk_ids"] == [501] and r.json()["prompt_version"] == "stub"
+
+
+@pytest.mark.parametrize("tab", ["motive", "intro", "portfolio", "career", "image"])
+def test_guide_content_shape_per_tab(tab):
+    req = {"tab": tab, "requirements": [
+        {"id": 11, "type": "required", "text": "Kafka", "verdict": "met", "reason": "...", "evidence": [C1]},
+        {"id": 12, "type": "preferred", "text": "Kubernetes", "verdict": "unmet", "reason": "..."}]}
+    content = c.post("/guide", json=req).json()["content"]
+    assert content["tab"] == tab  # 탭별 모양 구분 (계약의 discriminator)
+    if tab == "intro":
+        assert [x["requirement_id"] for x in content["coverage"]] == [11, 12]
+    if tab == "portfolio":
+        pages = content["pages"]
+        assert 4 <= len(pages) <= 8 and [p["order"] for p in pages] == list(range(1, len(pages) + 1))
+        assert {p["kind"] for p in pages} <= {"cover", "text", "diagram", "chart"}
+    if tab != "image":  # 인용은 sources 키, 요청 evidence 안에서만
+        assert all(s in (501,) for p in content["outline"] for s in p["sources"])
 
 
 def test_guide_tab_values():
