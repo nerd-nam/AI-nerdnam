@@ -50,7 +50,7 @@ DESCRIPTION = """API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`,
 - `/guide`는 탭마다 1회 호출, JSON 응답(SSE 아님).
 """
 
-app = FastAPI(title="nerdnam-ai", version="0.2.0", description=DESCRIPTION, lifespan=lifespan)
+app = FastAPI(title="nerdnam-ai", version="0.2.1", description=DESCRIPTION, lifespan=lifespan)
 
 # 503: 모델이 꺼짐·로딩 중 → API는 GPU_UNAVAILABLE. 502: LLM 출력 형식이 두 번 틀림 → AI_ERROR (기획서 5.5)
 _503 = {503: {"description": "모델 준비 안 됨 (GPU_UNAVAILABLE)"}}
