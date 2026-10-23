@@ -3,7 +3,7 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
 
-from app.config import LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT, VLLM_URL
+from app.config import LLM_MAX_MODEL_LEN, LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT, VLLM_URL
 
 client = httpx.AsyncClient(base_url=VLLM_URL, timeout=httpx.Timeout(LLM_TIMEOUT, connect=2))
 
@@ -21,6 +21,14 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
     r = await client.post("/v1/chat/completions", json=body)
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
+
+
+def fits(messages: list[dict], max_tokens: int) -> bool:
+    """입력+출력이 문맥 한도 안에 드는지 대략 확인. 한국어 JSON은 토큰 하나에 약 2.1자(1.97~2.68, 로컬 실측)라
+    1.8자로 넉넉하게 잡는다. 스키마·채팅 틀 몫으로 300토큰을 더 뺀다."""
+    # ponytail: 글자 수 어림. 한도 근처에서 빗나가면 토크나이저(/tokenize) 호출로 바꾼다
+    chars = sum(len(m["content"]) for m in messages)
+    return chars / 1.8 + max_tokens + 300 <= LLM_MAX_MODEL_LEN
 
 
 def strict_schema(schema: dict) -> dict:
@@ -46,6 +54,9 @@ async def generate[T: BaseModel](messages: list[dict], out: type[T], check=None,
     for _ in range(2):
         try:
             raw = await chat(messages, schema=strict_schema(out.model_json_schema()), max_tokens=max_tokens)
+        except httpx.HTTPStatusError as e:
+            # vLLM이 요청을 거부함 (예: 400 입력이 문맥 한도를 넘음). 그대로 두면 500 → API가 같은 요청을 다시 보낸다
+            raise HTTPException(502, f"llm error {e.response.status_code}: {e.response.text[:200]}")
         except httpx.ReadTimeout:
             raise HTTPException(504, "llm timeout")  # 생성이 LLM_TIMEOUT 안에 안 끝남 → API는 TIMEOUT, 재시도 안 함 (기획서 5.5)
         except httpx.TransportError:

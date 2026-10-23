@@ -7,6 +7,7 @@ AI_MODE = os.getenv("AI_MODE", "stub")
 LLM_MODEL = os.getenv("LLM_MODEL", "Qwen/Qwen3.5-4B")
 VLLM_URL = os.getenv("VLLM_URL", "http://localhost:8001")
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))  # 읽기 제한(초). 로컬 Mac은 느려서 늘린다 (.env.local.example)
+LLM_MAX_MODEL_LEN = int(os.getenv("LLM_MAX_MODEL_LEN", "8192"))  # 입력+출력 토큰 한도. vLLM --max-model-len, llama-server --ctx-size와 같게
 # 생성 설정. 서버마다 기본값이 달라(llama-server temperature 0.8, vLLM 1.0) 직접 보낸다.
 # Qwen3.5 권장(생각 모드 끔, 일반 작업). temperature·presence_penalty는 평가 세트로 비교할 값이라 환경변수로 바꿀 수 있다
 LLM_SAMPLING = {

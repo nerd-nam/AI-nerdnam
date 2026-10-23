@@ -111,3 +111,39 @@ def test_guide_image_uses_p5(llm_replies):
                  "tool_visuals": [{"name": "구조도", "page": 3, "kind": "diagram"}]})
     r = c.post("/guide", json=_guide_req("image")).json()
     assert r["prompt_version"] == "p5_v2" and r["cited_chunk_ids"] == []
+
+
+def test_guide_payload_dedupes_evidence(llm_replies):
+    calls = llm_replies(_writing(tab="motive"), _writing(tab="motive"))  # 777(근거 밖) 때문에 1회 다시 요청
+    req = _guide_req("motive")
+    req["requirements"][1]["evidence"] = [EP]  # 같은 청크가 두 요건에
+    c.post("/guide", json=req)
+    sent = json.loads(calls[0][0][1]["content"])
+    assert [x["chunk_id"] for x in sent["evidence"]] == [531]  # 청크는 한 번만
+    assert [r["evidence_ids"] for r in sent["requirements"]] == [[531], [531]] and "evidence" not in sent["requirements"][0]
+
+
+def test_guide_trims_evidence_when_too_long(llm_replies, monkeypatch):
+    from app.routers import guide as g
+    calls = llm_replies(_writing(tab="motive"), _writing(tab="motive"))  # 777(근거 밖) 때문에 1회 다시 요청
+    long = [{"chunk_id": 600 + i, "chunk_type": "episode", "text": "긴 사례 " * 300} for i in range(5)]
+    req = _guide_req("motive")
+    req["requirements"][0]["evidence"] = long
+    monkeypatch.setattr(llm, "LLM_MAX_MODEL_LEN", 8192)
+    c.post("/guide", json=req)
+    sent = json.loads(calls[0][0][1]["content"])
+    assert len(sent["requirements"][0]["evidence_ids"]) < 5  # 한도를 넘어 앞에서부터 줄임
+    monkeypatch.setattr(llm, "LLM_MAX_MODEL_LEN", 1000)  # 1개로도 안 들어가면 422 (API가 요건을 줄여야 함)
+    assert c.post("/guide", json=req).status_code == 422
+
+
+def test_llm_http_error_is_502(monkeypatch):
+    import httpx
+    monkeypatch.setitem(state.models, "llm", "ready")
+
+    async def chat(*a, **k):
+        resp = httpx.Response(400, text="maximum context length exceeded", request=httpx.Request("POST", "http://x"))
+        raise httpx.HTTPStatusError("bad", request=resp.request, response=resp)
+    monkeypatch.setattr(llm, "chat", chat)
+    r = c.post("/match", json={"requirements": [{"id": 1, "type": "required", "text": "x", "candidates": [EP]}]})
+    assert r.status_code == 502 and "400" in r.json()["detail"]  # 500이면 API가 같은 요청을 다시 보낸다

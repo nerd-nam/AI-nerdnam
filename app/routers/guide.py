@@ -19,6 +19,22 @@ _MODEL = {"motive": MotiveContent, "intro": IntroContent, "portfolio": Portfolio
 _NO_NUMBER_CHECK = {"tab", "kind", "ratio", "prompt", "negative"}  # 값이 정해진 칸, 영어 이미지 프롬프트
 
 
+MAX_TOKENS = 3072
+
+
+def _payload(req: GuideRequest, per_req: int | None = None) -> dict:
+    """모델에 보내는 입력. 같은 근거 청크가 여러 요건에 반복되므로(fixtures: 17번 중 서로 다른 청크 9개)
+    청크는 `evidence`에 한 번씩, 요건에는 `evidence_ids`만 둔다. per_req가 있으면 요건별 근거를 앞에서 그만큼만"""
+    pool, reqs = {}, []
+    for r in req.requirements:
+        ev = r.evidence[:per_req] if per_req else r.evidence
+        for c in ev:
+            pool.setdefault(c.chunk_id, c.model_dump())
+        reqs.append(r.model_dump(exclude={"evidence"}) | {"evidence_ids": [c.chunk_id for c in ev]})
+    head = req.model_dump(exclude={"requirements"})
+    return head | {"requirements": reqs, "evidence": list(pool.values())}
+
+
 def _version(tab: str) -> str:
     return "p5_v2" if tab == "image" else "p4_v2"
 
@@ -135,11 +151,16 @@ async def guide(req: GuideRequest):
     if state.models["llm"] != "ready":
         raise HTTPException(503, f"llm {state.models['llm']}")
     version = _version(req.tab)
-    messages = [
-        {"role": "system", "content": _PROMPTS[version]},
-        {"role": "user", "content": json.dumps(req.model_dump(), ensure_ascii=False)},
-    ]
-    o, _ = await llm.generate(messages, _MODEL[req.tab], check=lambda x: _problems(x, req), max_tokens=3072)
+    for per_req in (None, 3, 1):  # 문맥 한도를 넘으면 요건별 근거를 앞에서 3개, 1개로 줄인다
+        messages = [
+            {"role": "system", "content": _PROMPTS[version]},
+            {"role": "user", "content": json.dumps(_payload(req, per_req), ensure_ascii=False)},
+        ]
+        if llm.fits(messages, MAX_TOKENS):
+            break
+    else:
+        raise HTTPException(422, "요건·근거가 많아 문맥 한도를 넘음")  # API 쪽에서 요건 수를 줄여야 함, 재시도 안 함
+    o, _ = await llm.generate(messages, _MODEL[req.tab], check=lambda x: _problems(x, req), max_tokens=MAX_TOKENS)
     content = _clean(o, req)
     cited = list(dict.fromkeys(_sources(content.model_dump())))
     return GuideResponse(model=LLM_MODEL, prompt_version=version, content=content, cited_chunk_ids=cited)
