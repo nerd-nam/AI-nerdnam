@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app import embedding, llm, state
 from app.config import AI_MODE
 from app.routers import embed, gap_guide, guide, match, requirements, restructure
+from app.schemas import HealthResponse
 
 log = logging.getLogger("uvicorn.error")
 
@@ -41,13 +42,25 @@ async def lifespan(app: FastAPI):
     await llm.client.aclose()
 
 
-app = FastAPI(title="nerdnam-ai", version="0.1.0", lifespan=lifespan)
+DESCRIPTION = """API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`, 규칙은 SPEC 기획서 5.5 "AI 서버 공통 규칙".
 
-for r in (restructure, requirements, embed, match, gap_guide, guide):
-    app.include_router(r.router)
+- 모든 생성 응답에 `model`·`prompt_version`. `prompt_version`이 `"stub"`이면 가짜 응답(저장 안 함), `/embed`는 `embedding_model`이 `"stub"`.
+- 실패: 연결 실패·연결 시간 초과·503 → `GPU_UNAVAILABLE`(1회 재시도), 읽기 시간 초과 → `TIMEOUT`(재시도 안 함), 422 → `AI_ERROR`(재시도 안 함), 그 밖 5xx → `AI_ERROR`(1회 재시도).
+- 타임아웃: 연결 2초. 읽기 `/health` 2초 · `/embed` 10초 · `/requirements/extract` 20초 · `/restructure` 30초 · `/match` 30초 · `/gap-guide` 20초 · `/guide` 120초.
+- `/guide`는 탭마다 1회 호출, JSON 응답(SSE 아님).
+"""
+
+app = FastAPI(title="nerdnam-ai", version="0.1.0", description=DESCRIPTION, lifespan=lifespan)
+
+# 503: 모델이 꺼짐·로딩 중 → API는 GPU_UNAVAILABLE. 502: LLM 출력 형식이 두 번 틀림 → AI_ERROR (기획서 5.5)
+_503 = {503: {"description": "모델 준비 안 됨 (GPU_UNAVAILABLE)"}}
+_502 = {502: {"description": "LLM 출력 형식 오류 (AI_ERROR)"}}
+app.include_router(embed.router, responses=_503)
+for r in (restructure, requirements, match, gap_guide, guide):
+    app.include_router(r.router, responses=_503 | _502)
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 def health():
     # 예: {"status": "ok", "models": {"llm": "ready", "embedding": "ready"}}
     return {"status": "ok", "models": state.models}

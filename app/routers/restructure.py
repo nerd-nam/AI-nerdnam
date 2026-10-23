@@ -7,12 +7,12 @@ from pydantic import BaseModel, Field
 
 from app import llm, state
 from app.config import LLM_MODEL
-from app.schemas import Episode, Metric, RestructureRequest, RestructureResponse
+from app.schemas import Clarification, Episode, Metric, RestructureRequest, RestructureResponse
 from app.validators import unsupported_numbers
 
 router = APIRouter()
 
-PROMPT_VERSION = "p1_v1"
+PROMPT_VERSION = "p1_v2"
 PROMPT = (Path(__file__).parent.parent / "prompts" / f"{PROMPT_VERSION}.md").read_text(encoding="utf-8")
 
 
@@ -26,7 +26,7 @@ class Draft(BaseModel):
     result: str
     metrics: list[Metric] = []
     quotes: list[str] = []
-    questions: list[str] = []
+    clarifications: list[Clarification] = []
 
 
 class P1Out(BaseModel):
@@ -44,36 +44,42 @@ def _problems(out: P1Out, req: RestructureRequest, source: str) -> list[str]:
     for i, d in enumerate(out.episodes, 1):
         if nums := unsupported_numbers(_text(d), source):
             problems.append(f"사례 {i}: 원문·답변에 없는 수치 {nums}")
-        if bad := [q for q in d.quotes if q not in req.raw_text]:
+        if bad := [q for q in d.quotes if q not in req.source_text]:
             problems.append(f"사례 {i}: quotes가 원문과 글자 그대로 같지 않음 {bad}")
     return problems
 
 
 def _episode(d: Draft, req: RestructureRequest, source: str) -> Episode:
-    spans = sorted((s, s + len(q)) for q in d.quotes if (s := req.raw_text.find(q)) >= 0)
+    spans = sorted((s, s + len(q)) for q in d.quotes if (s := req.source_text.find(q)) >= 0)
     known = {s.lower() for s in req.skills}
-    questions = d.questions + [  # 다시 요청해도 남은 수치는 '확인 필요'로 돌려 확정 전에 사용자가 확인하게 한다 (F2)
-        f"원문에 없는 수치 '{n}'가 들어 있어요. 맞는 값인지 확인해 주세요." for n in unsupported_numbers(_text(d), source)
+    clar = d.clarifications + [  # 다시 요청해도 남은 수치는 '확인 필요'로 돌려 확정 전에 사용자가 확인하게 한다 (F2)
+        Clarification(field=_field_of(d, n), question=f"원문에 없는 수치 '{n}'가 들어 있어요. 맞는 값인지 확인해 주세요.")
+        for n in unsupported_numbers(_text(d), source)
     ]
+    for i, c in enumerate(clar, 1):
+        c.key = f"q{i}"  # 사례 안에서 겹치지 않게 AI가 붙인다
     return Episode(
-        episode_id=req.target_episode_id if req.mode == "episode" else None,
         title=d.title, role=d.role,
-        skills=[s for s in d.skills if s.lower() in known or s.lower() in req.raw_text.lower()],  # 없는 기술명 제거
+        skills=[s for s in d.skills if s.lower() in known or s.lower() in req.source_text.lower()],  # 없는 기술명 제거
         problem=d.problem, solution=d.solution, result=d.result, metrics=d.metrics,
-        source_spans=spans, questions=questions,
+        source_spans=spans, clarifications=clar,
     )
+
+
+def _field_of(d: Draft, n: str) -> str:
+    """수치가 들어 있는 필드. 메트릭에만 있으면 result"""
+    return next((f for f in ("problem", "solution", "result", "role", "title") if n in getattr(d, f)), "result")
 
 
 def _stub(req: RestructureRequest) -> RestructureResponse:
     ep = Episode(
-        episode_id=req.target_episode_id,
         title="(stub) 사례",
         skills=req.skills,
         problem="(stub)",
         solution="(stub)",
         result="(stub)",
-        source_spans=[(0, len(req.raw_text))],
-        questions=["(stub) 성과를 숫자로 확인할 수 있나요?"],
+        source_spans=[(0, len(req.source_text))],
+        clarifications=[Clarification(key="q1", field="result", question="(stub) 성과를 숫자로 확인할 수 있나요?", example="예: 1.2초 → 0.3초")],
     )
     return RestructureResponse(model=LLM_MODEL, prompt_version="stub", episodes=[ep])
 
@@ -84,7 +90,7 @@ async def restructure(req: RestructureRequest):
         return _stub(req)
     if state.models["llm"] != "ready":
         raise HTTPException(503, f"llm {state.models['llm']}")
-    source = " ".join([req.raw_text] + [a.answer for a in req.answers])  # 사실의 기준: 원문 + 확인 질문 답변
+    source = " ".join([req.source_text] + ([req.answer.answer] if req.answer else []))  # 사실의 기준: 원문(보충 답변 포함) + 이번 답변
     messages = [
         {"role": "system", "content": PROMPT},
         {"role": "user", "content": json.dumps(req.model_dump(), ensure_ascii=False)},
