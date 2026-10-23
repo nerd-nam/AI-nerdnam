@@ -1,7 +1,7 @@
 """API ↔ AI 요청·응답 모델 = 계약 C-04의 출처 (/openapi.json → SPEC contracts/api-ai.openapi.yaml).
 기획서 5.5가 정한 것(/embed items, mode·tab 값, /guide JSON)은 기획서를, 나머지 이름·구조는 BE infra.ai 타입을 따른다.
 ID(요건·청크)는 BE DB의 숫자 ID다."""
-from typing import Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -214,7 +214,90 @@ class GuideRequest(BaseModel):
     feedback: str | None = None
 
 
+# 탭별 content (AI 이슈 #9). 인용 청크 id는 어디서든 `sources` 키에 둔다 — BE가 이 키로 소유권을 거른다.
+# 화면 고정 문구(문단 구성 제목, 다시 만들기 안내)와 제작 도구 이름(kind로 정해짐)은 웹이 가진다.
+class Paragraph(BaseModel):
+    title: str
+    detail: str
+    sources: list[int] = []  # 근거 청크 id (요청 evidence 안에서만)
+
+
+class Writing(BaseModel):
+    """motive·intro·portfolio·career 공통"""
+    message: str  # 핵심 메시지
+    outline: list[Paragraph] = Field(min_length=1)  # 문단 구성
+    keywords: list[str] = []  # 강조 키워드
+    avoid: list[str] = []  # 피해야 할 표현
+
+
+class MotiveContent(Writing):
+    tab: Literal["motive"] = "motive"
+
+
+class Coverage(BaseModel):
+    requirement_id: int
+    covered: bool
+    where: str  # 다루는 곳 (예: "문단 2"), 다루지 않으면 이유
+
+
+class IntroContent(Writing):
+    tab: Literal["intro"] = "intro"
+    coverage: list[Coverage] = []  # 요건 커버리지
+
+
+PageKind = Literal["cover", "text", "diagram", "chart"]  # 4종만 (AI-09). 시각자료 미리보기(visual)는 없음 (D-1)
+
+
+class Page(BaseModel):
+    order: int  # 1부터
+    title: str
+    hint: str  # 쪽 내용 힌트. 숫자는 근거 원문에 있는 것만
+    kind: PageKind
+    sources: list[int] = []  # 사례 청크 id. BE가 episode_id로 바꾼다
+
+
+class PortfolioContent(Writing):
+    tab: Literal["portfolio"] = "portfolio"
+    pages: list[Page] = Field(min_length=4, max_length=8)  # 페이지 흐름 4~8쪽
+
+
+class Rewrite(BaseModel):
+    before: str  # 지금 표현
+    after: str  # 공고 용어로 바꾼 표현
+    requirement_id: int | None = None  # 맞춘 요건. 미리보기는 웹이 이 표로 만든다
+
+
+class CareerContent(Writing):
+    tab: Literal["career"] = "career"
+    rewrites: list[Rewrite] = []
+
+
+class ImagePrompt(BaseModel):
+    title: str
+    purpose: str  # 용도
+    page: int | None = None  # 포트폴리오 몇 쪽 (모르면 null)
+    ratio: str  # 예: "16:9"
+    prompt: str  # 영문 프롬프트
+    negative: str  # 제외 요소
+
+
+class ToolVisual(BaseModel):
+    """이미지 생성 대신 도구로 만들 시각자료 (글자·수치가 필요한 도식·차트)"""
+    name: str
+    page: int | None = None
+    kind: Literal["diagram", "chart"]
+
+
+class ImageContent(BaseModel):
+    tab: Literal["image"] = "image"
+    prompts: list[ImagePrompt] = Field(min_length=1)
+    tool_visuals: list[ToolVisual] = []
+
+
+GuideContent = Annotated[
+    MotiveContent | IntroContent | PortfolioContent | CareerContent | ImageContent, Field(discriminator="tab")]
+
+
 class GuideResponse(Meta):
-    # ponytail: 탭별 content 모양은 AI-08~10(P4·P5 프롬프트)에서 정한다. v0.1은 객체로만 고정, 인용은 sources(청크 id 목록)
-    content: dict[str, Any]
-    cited_chunk_ids: list[int]
+    content: GuideContent  # 요청한 tab의 content
+    cited_chunk_ids: list[int]  # content 안 sources 전체 (중복 없이)
