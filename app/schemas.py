@@ -33,7 +33,7 @@ class HealthModels(BaseModel):
 
 class HealthResponse(BaseModel):
     status: Literal["ok"]
-    models: HealthModels  # 모두 ready 일 때만 준비된 것으로 본다
+    models: HealthModels  # 임베딩 대기 재처리는 embedding 이 ready 일 때, 생성 작업은 llm 이 ready 일 때 (기획서 v1.29)
 
 
 # ── /restructure (P1) ─────────────────────────────
