@@ -95,3 +95,29 @@ def test_spaced_quote_and_metric_source(llm_replies):
     assert len(calls) == 1  # 공백 차이로 다시 요청하지 않음
     assert ep["source_spans"] == [[RAW.find(Q2), RAW.find(Q2) + len(Q2)]]
     assert ep["metrics"][0]["source"] == "raw_text"
+
+
+def test_llm_schema_requires_all_fields():
+    # 기본값이 있으면 JSON 스키마에서 생략 가능이 되어 모델이 role·skills·수치 값을 건너뛴다 (로컬 테스트)
+    from app.routers.restructure import P1Out
+    defs = P1Out.model_json_schema()["$defs"]
+    assert set(defs["Draft"]["required"]) == set(defs["Draft"]["properties"])
+    assert set(defs["DraftMetric"]["required"]) == {"name", "before", "after", "source"}
+    assert set(defs["DraftQuestion"]["required"]) == {"field", "question", "example"}
+
+
+def test_sampling_sent(monkeypatch):
+    # 서버 기본값(llama-server 0.8, vLLM 1.0)에 맡기지 않고 직접 보낸다
+    import asyncio
+    sent = {}
+
+    class R:
+        def raise_for_status(self): pass
+        def json(self): return {"choices": [{"message": {"content": "ok"}}]}
+
+    async def post(url, json):
+        sent.update(json)
+        return R()
+    monkeypatch.setattr(llm.client, "post", post)
+    asyncio.run(llm.chat([{"role": "user", "content": "ping"}]))
+    assert sent["temperature"] == 0.7 and sent["top_k"] == 20 and sent["presence_penalty"] == 1.5

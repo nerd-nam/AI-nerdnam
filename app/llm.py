@@ -3,9 +3,9 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
 
-from app.config import LLM_MODEL, VLLM_URL
+from app.config import LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT, VLLM_URL
 
-client = httpx.AsyncClient(base_url=VLLM_URL, timeout=httpx.Timeout(60, connect=2))
+client = httpx.AsyncClient(base_url=VLLM_URL, timeout=httpx.Timeout(LLM_TIMEOUT, connect=2))
 
 
 async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048) -> str:
@@ -14,6 +14,7 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
         "messages": messages,
         "max_tokens": max_tokens,
         "chat_template_kwargs": {"enable_thinking": False},  # thinking 끔 (Kaggle에서 확인)
+        **LLM_SAMPLING,
     }
     if schema:
         body["response_format"] = {"type": "json_schema", "json_schema": {"name": "out", "schema": schema}}
