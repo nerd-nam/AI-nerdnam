@@ -2,6 +2,8 @@
 
 API 서버만 호출하는 내부 AI 서버 (FastAPI, 상태 없음). 기획서 5.5의 엔드포인트 6개와 `/health`.
 
+**따르는 계약:** SPEC `contracts/api-ai.openapi.yaml` 태그 `contracts-v0.1.0` (출처는 이 레포 `app/schemas.py`).
+
 | 모델 | 용도 | 서빙 |
 | --- | --- | --- |
 | `Qwen/Qwen3.5-4B` | LLM (P1~P5) | vLLM 컨테이너 |
@@ -72,7 +74,7 @@ uv run python -m evals.load_test
 
 | 경로 | 내용 |
 | --- | --- |
-| `app/schemas.py` | 요청·응답 모델. 계약 C-04 초안의 출처 (`/openapi.json`) |
+| `app/schemas.py` | 요청·응답 모델. 계약 C-04의 출처 (`/openapi.json`). 바꾸면 `uv run python -m scripts.export_contract ../SPEC-nerdnam/contracts/api-ai.openapi.yaml`로 SPEC에 내보낸다 |
 | `app/routers/` | restructure, requirements, embed, match, gap_guide, guide |
 | `app/config.py` | 환경변수 (`AI_MODE`, `LLM_MODEL`, `VLLM_URL`, `EMBED_*`) |
 | `app/embedding.py` | 임베딩 로딩·접두어 규칙 (서버와 evals가 같이 씀) |

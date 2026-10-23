@@ -1,26 +1,14 @@
-import json
-
 from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
 
 from app.config import LLM_MODEL
-from app.schemas import GuideRequest
+from app.schemas import GuideRequest, GuideResponse
 
 router = APIRouter()
 
 
-def sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-@router.post("/guide")
+@router.post("/guide", response_model=GuideResponse)
 def guide(req: GuideRequest):
-    # TODO(AI-08~10): P4·P5 스트리밍. 지금은 delta 2개 + done 1개 가짜 이벤트
-    cite = req.evidence[0].chunk_id if req.evidence else None
-
-    def events():
-        yield sse("delta", {"text": f"(stub) {req.tab} 방향성 "})
-        yield sse("delta", {"text": f"[{cite}]" if cite else ""})
-        yield sse("done", {"tab": req.tab, "model": LLM_MODEL, "prompt_version": "stub"})
-
-    return StreamingResponse(events(), media_type="text/event-stream")
+    # TODO(AI-08~10): P4·P5 프롬프트. 지금은 첫 근거를 인용하는 가짜 응답
+    cited = [c.chunk_id for r in req.requirements for c in r.evidence][:1]
+    content = {"text": f"(stub) {req.tab} 방향성", "sources": cited}
+    return GuideResponse(model=LLM_MODEL, prompt_version="stub", content=content, cited_chunk_ids=cited)
