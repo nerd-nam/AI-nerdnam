@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app import llm, state
@@ -16,17 +18,32 @@ PROMPT_VERSION = "p1_v2"
 PROMPT = (Path(__file__).parent.parent / "prompts" / f"{PROMPT_VERSION}.md").read_text(encoding="utf-8")
 
 
+# LLM 출력 스키마. 기본값을 두지 않는다: 기본값이 있으면 JSON 스키마에서 생략 가능이 되고,
+# 모델이 role·skills·수치 값을 통째로 건너뛴다(로컬 테스트 2026-10-23). 없으면 ""·[]·null을 직접 쓰게 한다.
+class DraftMetric(BaseModel):
+    name: str
+    before: str | None
+    after: str | None
+    source: Literal["raw_text", "answer"]
+
+
+class DraftQuestion(BaseModel):
+    field: Literal["role", "problem", "solution", "result"]
+    question: str
+    example: str | None
+
+
 class Draft(BaseModel):
-    """LLM 출력. 문자 위치는 LLM이 틀리기 쉬워 원문 인용(quotes)을 받아 source_spans를 직접 계산한다."""
+    """문자 위치는 LLM이 틀리기 쉬워 원문 인용(quotes)을 받아 source_spans를 직접 계산한다."""
     title: str
-    role: str = ""
-    skills: list[str] = []
+    role: str
+    skills: list[str]
     problem: str
     solution: str
     result: str
-    metrics: list[Metric] = []
-    quotes: list[str] = []
-    clarifications: list[Clarification] = []
+    metrics: list[DraftMetric]
+    quotes: list[str]
+    clarifications: list[DraftQuestion]
 
 
 class P1Out(BaseModel):
@@ -52,7 +69,7 @@ def _problems(out: P1Out, req: RestructureRequest, source: str) -> list[str]:
 def _episode(d: Draft, req: RestructureRequest, source: str) -> Episode:
     spans = sorted({sp for q in d.quotes if (sp := find_span(q, req.source_text))})
     known = {s.lower() for s in req.skills}
-    clar = d.clarifications + [  # 다시 요청해도 남은 수치는 '확인 필요'로 돌려 확정 전에 사용자가 확인하게 한다 (F2)
+    clar = [Clarification(**q.model_dump()) for q in d.clarifications] + [  # 다시 요청해도 남은 수치는 '확인 필요'로 돌려 확정 전에 사용자가 확인하게 한다 (F2)
         Clarification(field=_field_of(d, n), question=f"원문에 없는 수치 '{n}'가 들어 있어요. 맞는 값인지 확인해 주세요.")
         for n in unsupported_numbers(_text(d), source)
     ]
@@ -61,7 +78,7 @@ def _episode(d: Draft, req: RestructureRequest, source: str) -> Episode:
     return Episode(
         title=d.title, role=d.role,
         skills=[s for s in d.skills if s.lower() in known or s.lower() in req.source_text.lower()],  # 없는 기술명 제거
-        problem=d.problem, solution=d.solution, result=d.result, metrics=[_sourced(m, req) for m in d.metrics],
+        problem=d.problem, solution=d.solution, result=d.result, metrics=[_sourced(Metric(**m.model_dump()), req) for m in d.metrics],
         source_spans=spans, clarifications=clar,
     )
 
