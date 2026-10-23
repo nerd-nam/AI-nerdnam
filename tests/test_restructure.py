@@ -73,3 +73,25 @@ def test_episode_mode_returns_one(llm_replies):
 def test_503_while_loading(monkeypatch):
     monkeypatch.setitem(state.models, "llm", "loading")
     assert c.post("/restructure", json={"mode": "initial", "source_text": RAW}).status_code == 503
+
+
+def test_llm_read_timeout_is_504(monkeypatch):
+    # 읽기 시간 초과를 503(GPU 꺼짐)으로 보내면 BE가 재시도해 GPU 부하가 두 배가 된다 (기획서 5.5)
+    import httpx
+    monkeypatch.setitem(state.models, "llm", "ready")
+
+    async def chat(*a, **k):
+        raise httpx.ReadTimeout("slow")
+    monkeypatch.setattr(llm, "chat", chat)
+    assert c.post("/restructure", json={"mode": "initial", "source_text": RAW}).status_code == 504
+
+
+def test_spaced_quote_and_metric_source(llm_replies):
+    # 모델이 "0.3 초"처럼 띄어 써도 위치를 찾고, 원문에 있는 수치는 출처를 raw_text로 고친다
+    out = json.loads(draft("평균 응답 0.3초", ["그 결과 평균 응답이 0.3 초로 줄었다."]))
+    out["episodes"][0]["metrics"] = [{"name": "평균 응답", "before": "1.2 초", "after": "0.3 초", "source": "answer"}]
+    calls = llm_replies(json.dumps(out, ensure_ascii=False))
+    ep = c.post("/restructure", json={"mode": "initial", "source_text": RAW}).json()["episodes"][0]
+    assert len(calls) == 1  # 공백 차이로 다시 요청하지 않음
+    assert ep["source_spans"] == [[RAW.find(Q2), RAW.find(Q2) + len(Q2)]]
+    assert ep["metrics"][0]["source"] == "raw_text"

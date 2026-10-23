@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from app import llm, state
 from app.config import LLM_MODEL
 from app.schemas import Clarification, Episode, Metric, RestructureRequest, RestructureResponse
-from app.validators import unsupported_numbers
+from app.validators import find_span, numbers, unsupported_numbers
 
 router = APIRouter()
 
@@ -44,13 +44,13 @@ def _problems(out: P1Out, req: RestructureRequest, source: str) -> list[str]:
     for i, d in enumerate(out.episodes, 1):
         if nums := unsupported_numbers(_text(d), source):
             problems.append(f"사례 {i}: 원문·답변에 없는 수치 {nums}")
-        if bad := [q for q in d.quotes if q not in req.source_text]:
+        if bad := [q for q in d.quotes if find_span(q, req.source_text) is None]:
             problems.append(f"사례 {i}: quotes가 원문과 글자 그대로 같지 않음 {bad}")
     return problems
 
 
 def _episode(d: Draft, req: RestructureRequest, source: str) -> Episode:
-    spans = sorted((s, s + len(q)) for q in d.quotes if (s := req.source_text.find(q)) >= 0)
+    spans = sorted({sp for q in d.quotes if (sp := find_span(q, req.source_text))})
     known = {s.lower() for s in req.skills}
     clar = d.clarifications + [  # 다시 요청해도 남은 수치는 '확인 필요'로 돌려 확정 전에 사용자가 확인하게 한다 (F2)
         Clarification(field=_field_of(d, n), question=f"원문에 없는 수치 '{n}'가 들어 있어요. 맞는 값인지 확인해 주세요.")
@@ -61,9 +61,21 @@ def _episode(d: Draft, req: RestructureRequest, source: str) -> Episode:
     return Episode(
         title=d.title, role=d.role,
         skills=[s for s in d.skills if s.lower() in known or s.lower() in req.source_text.lower()],  # 없는 기술명 제거
-        problem=d.problem, solution=d.solution, result=d.result, metrics=d.metrics,
+        problem=d.problem, solution=d.solution, result=d.result, metrics=[_sourced(m, req) for m in d.metrics],
         source_spans=spans, clarifications=clar,
     )
+
+
+def _sourced(m: Metric, req: RestructureRequest) -> Metric:
+    """수치 출처는 모델 말 대신 원문에서 확인한다: 원문에 있으면 raw_text, 이번 답변에만 있으면 answer"""
+    vals = numbers(f"{m.before or ''} {m.after or ''}")
+    if not vals:
+        return m
+    if vals <= numbers(req.source_text):
+        return m.model_copy(update={"source": "raw_text"})
+    if req.answer and vals <= numbers(req.source_text + " " + req.answer.answer):
+        return m.model_copy(update={"source": "answer"})
+    return m  # 어디에도 없는 수치는 unsupported_numbers 가 확인 질문으로 돌린다
 
 
 def _field_of(d: Draft, n: str) -> str:

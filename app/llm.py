@@ -29,6 +29,8 @@ async def generate[T: BaseModel](messages: list[dict], out: type[T], check=None,
     for _ in range(2):
         try:
             raw = await chat(messages, schema=out.model_json_schema(), max_tokens=max_tokens)
+        except httpx.ReadTimeout:
+            raise HTTPException(504, "llm timeout")  # 생성이 LLM_TIMEOUT 안에 안 끝남 → API는 TIMEOUT, 재시도 안 함 (기획서 5.5)
         except httpx.TransportError:
             raise HTTPException(503, "llm unavailable")  # vLLM이 꺼짐·로딩 중 → API는 GPU_UNAVAILABLE (기획서 5.5)
         try:

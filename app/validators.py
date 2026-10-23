@@ -19,3 +19,14 @@ def unsupported_numbers(text: str, source: str) -> list[str]:
 def unknown_ids(ids: list[str], allowed: set[str]) -> list[str]:
     """입력에 없는 인용 청크 ID."""
     return [i for i in ids if i not in allowed]
+
+
+def find_span(quote: str, text: str) -> tuple[int, int] | None:
+    """quote가 text에 나오는 위치 [시작, 끝). 공백 차이는 무시한다.
+    모델이 원문을 베껴도 "1.2초" → "1.2 초", "Kafka로" → "Kafka 로"처럼 띄어 쓰는 경우가 있다 (로컬 테스트)."""
+    q = "".join(quote.split())
+    if not q:
+        return None
+    pos = [i for i, ch in enumerate(text) if not ch.isspace()]  # 공백을 뺀 글자 → 원문 위치
+    s = "".join(text[i] for i in pos).find(q)
+    return (pos[s], pos[s + len(q) - 1] + 1) if s >= 0 else None
