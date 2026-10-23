@@ -1,7 +1,7 @@
 """API ↔ AI 요청·응답 모델 (기획서 4.3, 5.5 기준). 계약 C-04 초안의 출처."""
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Meta(BaseModel):
@@ -44,6 +44,13 @@ class RestructureRequest(BaseModel):
     answers: list[QA] = []
     feedback: str | None = None
 
+    @model_validator(mode="after")
+    def split_needs_feedback(self):
+        # 다시 나누기는 피드백 없이 누를 수 없다 (기획서 F2). 원문을 고친 뒤 새로 나누기는 initial
+        if self.mode == "split" and not (self.feedback and self.feedback.strip()):
+            raise ValueError("mode=split 은 feedback 이 필요함")
+        return self
+
 
 class RestructureResponse(Meta):
     episodes: list[Episode]
@@ -81,7 +88,8 @@ class EmbedRequest(BaseModel):
     items: list[EmbedItem] = Field(min_length=1)
 
 
-class EmbedResponse(Meta):
+class EmbedResponse(BaseModel):
+    embedding_model: str  # 청크마다 저장해 재임베딩 대상을 찾는 데 씀 (기획서 4.4·5.5). 가짜 응답이면 "stub"
     dim: int
     vectors: list[list[float]]
 
@@ -115,6 +123,31 @@ class MatchResult(BaseModel):
 
 class MatchResponse(Meta):
     results: list[MatchResult]
+
+
+# ── /gap-guide (P6, ADR-0003) ─────────────────────
+class GapRequirement(BaseModel):
+    id: str
+    type: Literal["required", "preferred"]
+    text: str
+    verdict: Literal["partial", "unmet"]  # 충족(met)은 보내지 않는다
+    adjacent: list[Chunk] = []  # /match 에서 뽑히지 못한 후보 경험 (인접 경험)
+
+
+class GapGuideRequest(BaseModel):
+    requirements: list[GapRequirement] = Field(min_length=1)
+    duties: list[str] = []  # 공고 주요 업무
+
+
+class GapGuideResult(BaseModel):
+    requirement_id: str
+    guide: str  # 가이드 문장
+    avoid: str  # 하지 말 것 문장
+    evidence_chunk_ids: list[str]  # 인용한 인접 경험. 입력의 adjacent 안에서만
+
+
+class GapGuideResponse(Meta):
+    results: list[GapGuideResult]
 
 
 # ── /guide (P4·P5, SSE) ───────────────────────────
