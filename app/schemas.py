@@ -231,7 +231,7 @@ class Writing(BaseModel):
 
 
 class MotiveContent(Writing):
-    tab: Literal["motive"] = "motive"
+    tab: Literal["motive"]
 
 
 class Coverage(BaseModel):
@@ -241,7 +241,7 @@ class Coverage(BaseModel):
 
 
 class IntroContent(Writing):
-    tab: Literal["intro"] = "intro"
+    tab: Literal["intro"]
     coverage: list[Coverage] = []  # 요건 커버리지
 
 
@@ -257,7 +257,7 @@ class Page(BaseModel):
 
 
 class PortfolioContent(Writing):
-    tab: Literal["portfolio"] = "portfolio"
+    tab: Literal["portfolio"]
     pages: list[Page] = Field(min_length=4, max_length=8)  # 페이지 흐름 4~8쪽
 
 
@@ -268,7 +268,7 @@ class Rewrite(BaseModel):
 
 
 class CareerContent(Writing):
-    tab: Literal["career"] = "career"
+    tab: Literal["career"]
     rewrites: list[Rewrite] = []
 
 
@@ -289,7 +289,7 @@ class ToolVisual(BaseModel):
 
 
 class ImageContent(BaseModel):
-    tab: Literal["image"] = "image"
+    tab: Literal["image"]
     prompts: list[ImagePrompt] = Field(min_length=1)
     tool_visuals: list[ToolVisual] = []
 

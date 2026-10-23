@@ -10,6 +10,7 @@ router = APIRouter()
 def _stub_content(req: GuideRequest, cited: list[int]):
     """탭별 content 모양 그대로의 가짜 응답. FE·BE가 GPU 없이 개발할 때 쓴다 (AI 이슈 #9)"""
     common = dict(
+        tab=req.tab,
         message=f"(stub) {req.tab} 핵심 메시지",
         outline=[Paragraph(title="(stub) 문단 1", detail="(stub) 근거 경험으로 쓰기", sources=cited)],
         keywords=["(stub) 키워드"],
@@ -31,7 +32,7 @@ def _stub_content(req: GuideRequest, cited: list[int]):
             return CareerContent(**common, rewrites=[
                 Rewrite(before="(stub) 지금 표현", after=f"(stub) {reqs[0].text}에 맞춘 표현", requirement_id=reqs[0].id)])
         case "image":
-            return ImageContent(
+            return ImageContent(tab="image",
                 prompts=[ImagePrompt(title="(stub) 커버 이미지", purpose="포트폴리오 커버", page=1, ratio="16:9",
                                      prompt="(stub) minimal flat tech illustration, no text", negative="text, logos")],
                 tool_visuals=[ToolVisual(name="(stub) 구조 도식", page=3, kind="diagram")])
