@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 
@@ -53,8 +54,8 @@ DESCRIPTION = """API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`,
 app = FastAPI(title="nerdnam-ai", version="0.2.1", description=DESCRIPTION, lifespan=lifespan)
 
 # 503: 모델이 꺼짐·로딩 중 → API는 GPU_UNAVAILABLE. 502: LLM 출력 형식이 두 번 틀림 → AI_ERROR (기획서 5.5)
-_503 = {503: {"description": "모델 준비 안 됨 (GPU_UNAVAILABLE)"}}
-_502 = {502: {"description": "LLM 출력 형식 오류 (AI_ERROR)"}, 504: {"description": "LLM 생성 시간 초과 (TIMEOUT, 재시도 안 함)"}}
+_503: dict[int | str, dict[str, Any]] = {503: {"description": "모델 준비 안 됨 (GPU_UNAVAILABLE)"}}
+_502: dict[int | str, dict[str, Any]] = {502: {"description": "LLM 출력 형식 오류 (AI_ERROR)"}, 504: {"description": "LLM 생성 시간 초과 (TIMEOUT, 재시도 안 함)"}}
 app.include_router(embed.router, responses=_503)
 for r in (restructure, requirements, match, gap_guide, guide):
     app.include_router(r.router, responses=_503 | _502)
