@@ -129,26 +129,22 @@ uv run python evals/smoke_restructure.py ../SPEC-nerdnam/fixtures/projects.json 
 uv run python evals/smoke_report.py ../SPEC-nerdnam/fixtures                      # embed → match → gap-guide → guide
 ```
 
+**4단계 (선택): 요건 약어 확장어 확인 (AI-16)** — 28줄을 P2에 보내고, 나온 확장어로 검색 순위를 비교합니다.
+
+```bash
+uv run python -m evals.extract_eval                                           # → evals/out/extract.json
+uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # 원문 / 사람 확장어 / P2 확장어 순위
+```
+
+- ① 원본 모델이면 `.env`의 `LLM_MODEL`을 그대로, ② GGUF면 `local/Qwen3.5-4B-gguf`로 둡니다. 결과 JSON의 `model` 값으로 어떤 모델로 쟀는지 구분합니다.
+- P2는 온도 0입니다. ①은 항상 같은 답을 고르므로(`do_sample=False`) 결과가 같습니다.
+
 **주의**
 
 - 메모리(16GB Mac 기준): LLM bf16 약 9GB + 임베딩 약 2GB. BE·DB Docker(약 8GB)까지 같이 띄우면 부족합니다. 그럴 땐 Docker 메모리를 줄이거나 GGUF `Q8_0`를 쓰세요.
 - 로컬은 **로직 확인용**입니다. 실행 방식·정밀도·JSON 강제 방식이 달라서 결과가 GPU 서버와 같지 않습니다. 품질·응답 시간·부하는 GPU 서버에서 잽니다.
 - `LLM_MODEL`을 실제 모델 이름과 다르게 두어, 로컬 결과가 GPU 서버 결과로 저장되지 않게 합니다(`.env.local.example`에 이미 그렇게 되어 있음).
 - BE가 Docker 안에 있으면 AI 서버 주소는 `http://host.docker.internal:8000`입니다. 로컬은 느리므로 BE의 AI 읽기 타임아웃도 늘려야 합니다.
-
-### A-2. 로컬 Windows (NVIDIA GPU 6GB 이상)
-
-위 A와 같고, 1단계만 ② GGUF로 합니다(2026-10-25 GTX 1660 SUPER 6GB에서 확인).
-
-- llama.cpp 릴리스에서 `llama-bXXXX-bin-win-cuda-12.4-x64.zip`과 `cudart-llama-bin-win-cuda-12.4-x64.zip`을 받아 한 폴더에 풉니다. **CUDA 13.4 빌드는 드라이버 596(CUDA 13.2)에서 `the provided PTX was compiled with an unsupported toolchain`으로 실패**합니다. `nvidia-smi`의 CUDA Version보다 높지 않은 빌드를 고르세요.
-- 6GB에서는 모델 전체를 GPU에 올리도록 슬롯 1개·문맥 4096으로 줄입니다. 일부가 CPU에 남으면 메모리가 모자랄 때 토큰 속도가 초당 19개 → 0.6개로 떨어집니다.
-
-```bash
-llama-server -hf bartowski/Qwen_Qwen3.5-4B-GGUF:Q8_0 --no-mmproj --port 8001 --ctx-size 4096 --parallel 1 -ngl 99 --jinja --reasoning-budget 0
-```
-
-- 메모리 16GB면 Docker Desktop(WSL)을 끄고 실행합니다. 같이 켜 두면 스왑이 생겨 매우 느려집니다.
-- AI 서버의 임베딩은 CPU로 돕니다(`uv`로 설치한 torch는 CPU 버전).
 
 ### B. GPU 서버 한 대 (docker compose)
 
