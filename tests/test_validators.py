@@ -30,7 +30,7 @@ class Out(BaseModel):
 def fake_chat(replies):
     calls = []
 
-    async def chat(messages, schema=None, max_tokens=0):
+    async def chat(messages, schema=None, max_tokens=0, temperature=None):
         calls.append(messages)
         return replies[len(calls) - 1]
     return chat, calls

@@ -19,7 +19,7 @@ def llm_replies(monkeypatch):
 
     def set_replies(*replies):
         """응답을 차례로 준다. 응답이 함수면 메시지를 보고 고른다 (요건마다 동시에 부르는 /match용)"""
-        async def chat(messages, schema=None, max_tokens=0):
+        async def chat(messages, schema=None, max_tokens=0, temperature=None):
             calls.append((messages, schema))
             r = replies[0] if callable(replies[0]) else replies[len(calls) - 1]
             return json.dumps(r(messages) if callable(r) else r, ensure_ascii=False)

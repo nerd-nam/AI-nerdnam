@@ -7,7 +7,7 @@ nerdnam(AI 맞춤형 지원서 코치)의 **AI 서버**입니다. 프로젝트 �
 - FastAPI, Python 3.12, 패키지 관리는 [uv](https://docs.astral.sh/uv/)를 씁니다.
 
 > 기획·계약·예시 데이터는 공용 문서 레포 `nerdnam-docs`(로컬 폴더 `SPEC-nerdnam`)에 있습니다.
-> 이 서버는 계약 `contracts/api-ai.openapi.yaml`의 태그 **`contracts-v0.2.1`** 을 따릅니다.
+> 이 서버는 계약 `contracts/api-ai.openapi.yaml`의 태그 **`contracts-v0.3.0`** 을 따릅니다.
 
 ## 목차
 
@@ -40,7 +40,7 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 | --- | --- | --- | --- |
 | `GET /health` | 모델이 준비됐는지 알려 줌 | — | — |
 | `POST /restructure` | 프로젝트 원문을 사례(에피소드) 목록으로 나눔. `mode`: `initial` 처음 나누기 / `split` 다시 나누기 / `episode` 사례 하나 고치기 | P1 | S05 |
-| `POST /requirements/extract` | 공고 요건 줄마다 기술명(`skills_raw`)과 최소 연차(`min_years`)를 뽑음 | P2 | S07 |
+| `POST /requirements/extract` | 공고 요건 줄마다 기술명(`skills_raw`), 약어 확장어(`expansions`, 예: MSA → 마이크로서비스 아키텍처), 최소 연차(`min_years`)를 뽑음 | P2 | S07 |
 | `POST /embed` | 텍스트를 768차원 벡터로 바꿈. `purpose`: `document` 청크 저장 / `query` 요건 검색 | — | — |
 | `POST /match` | 요건마다 경험 후보(최대 20개)를 보고 판정(`met`/`partial`/`unmet`)·근거(최대 5개)·이유를 줌 | P3 | S08 |
 | `POST /gap-guide` | 미충족·부분 충족 요건을 지원서에서 정직하게 다루는 가이드 | P6 | S08 |
@@ -136,6 +136,20 @@ uv run python evals/smoke_report.py ../SPEC-nerdnam/fixtures                    
 - `LLM_MODEL`을 실제 모델 이름과 다르게 두어, 로컬 결과가 GPU 서버 결과로 저장되지 않게 합니다(`.env.local.example`에 이미 그렇게 되어 있음).
 - BE가 Docker 안에 있으면 AI 서버 주소는 `http://host.docker.internal:8000`입니다. 로컬은 느리므로 BE의 AI 읽기 타임아웃도 늘려야 합니다.
 
+### A-2. 로컬 Windows (NVIDIA GPU 6GB 이상)
+
+위 A와 같고, 1단계만 ② GGUF로 합니다(2026-10-25 GTX 1660 SUPER 6GB에서 확인).
+
+- llama.cpp 릴리스에서 `llama-bXXXX-bin-win-cuda-12.4-x64.zip`과 `cudart-llama-bin-win-cuda-12.4-x64.zip`을 받아 한 폴더에 풉니다. **CUDA 13.4 빌드는 드라이버 596(CUDA 13.2)에서 `the provided PTX was compiled with an unsupported toolchain`으로 실패**합니다. `nvidia-smi`의 CUDA Version보다 높지 않은 빌드를 고르세요.
+- 6GB에서는 모델 전체를 GPU에 올리도록 슬롯 1개·문맥 4096으로 줄입니다. 일부가 CPU에 남으면 메모리가 모자랄 때 토큰 속도가 초당 19개 → 0.6개로 떨어집니다.
+
+```bash
+llama-server -hf bartowski/Qwen_Qwen3.5-4B-GGUF:Q8_0 --no-mmproj --port 8001 --ctx-size 4096 --parallel 1 -ngl 99 --jinja --reasoning-budget 0
+```
+
+- 메모리 16GB면 Docker Desktop(WSL)을 끄고 실행합니다. 같이 켜 두면 스왑이 생겨 매우 느려집니다.
+- AI 서버의 임베딩은 CPU로 돕니다(`uv`로 설치한 torch는 CPU 버전).
+
 ### B. GPU 서버 한 대 (docker compose)
 
 GPU 서버 한 대에서 시험할 때 씁니다. 운영 배포는 아래 C를 보세요.
@@ -167,6 +181,9 @@ uv run pytest                                                     # 단위 테�
 uv run --extra model python -m evals.embed_eval                   # 임베딩 검색 품질 (Mac·Kaggle·GPU 어디서나)
 uv run --extra model python -m evals.embed_eval --compare-full    # 텍스트 인코더만 불러와도 결과가 같은지 확인
 
+uv run python -m evals.extract_eval                               # P2 약어 확장어 확인 (real 모드 서버를 띄운 뒤)
+uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # P2 확장어로 검색 순위 비교
+
 uv run python -m evals.load_test                                  # 동시 요청 부하 테스트 (GPU 서버, compose 실행 후)
 ```
 
@@ -193,7 +210,8 @@ AI-nerdnam/
 │   │   └── guide.py          /guide
 │   └── prompts/              프롬프트 (p1_v2.md = P1 버전 2)
 ├── evals/                    평가·확인 도구
-│   ├── embed_eval.py         임베딩 검색 품질
+│   ├── embed_eval.py         임베딩 검색 품질 (약어 확장어 비교 포함)
+│   ├── extract_eval.py       P2 약어 확장어 확인 (extract_cases.json)
 │   ├── load_test.py          부하 테스트
 │   ├── local_llm.py          Mac용 로컬 LLM 서버 (vLLM 대신)
 │   ├── smoke_restructure.py  /restructure 흐름 확인
@@ -208,6 +226,7 @@ AI-nerdnam/
 ### 프롬프트를 바꿀 때
 
 - 파일 이름이 버전입니다(`p3_v2.md`). 내용을 크게 바꾸면 새 버전 파일을 만듭니다. 이 버전이 응답의 `prompt_version`으로 나가 API 서버에 결과와 함께 저장됩니다.
+- P2는 LLM을 두 번(동시에) 부릅니다. 기술명 `p2_v2.md`와 약어 확장어 `p2_v2_abbr.md`가 한 버전(`p2_v2`)입니다. 둘 중 하나를 바꿔도 버전을 같이 올립니다.
 - 바꾼 뒤에는 평가 세트로 품질을 다시 확인합니다(작업목록 AI-11).
 
 ## 계약(API 모양)을 바꿀 때
@@ -232,7 +251,7 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | `VLLM_URL` | `http://localhost:8001` | LLM 서버 주소 |
 | `LLM_TIMEOUT` | `60` | LLM 읽기 제한(초). 로컬 Mac은 600 |
 | `LLM_MAX_MODEL_LEN` | `8192` | 입력+출력 토큰 한도. vLLM `--max-model-len`과 같게 |
-| `LLM_TEMPERATURE` | `0.7` | 생성 온도 |
+| `LLM_TEMPERATURE` | `0.7` | 생성 온도. P2(`/requirements/extract`)는 추출이라 이 값과 상관없이 0 |
 | `LLM_PRESENCE_PENALTY` | `1.5` | 반복 억제 |
 | `EMBED_REPO` | `google/embeddinggemma-2` | 임베딩 모델 (바꾸지 않음) |
 | `EMBED_REVISION` | `914f7f8…` | 임베딩 모델 버전 (고정, 바꾸지 않음) |
@@ -247,7 +266,7 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | --- | --- |
 | `기획서.md` 5.5 | API↔AI 엔드포인트, 공통 규칙(오류·타임아웃·stub) |
 | `기획서.md` 5.6 | 프롬프트 설계 |
-| `작업목록.md` AI-01~15 | AI 담당 작업 목록 |
+| `작업목록.md` AI-01~16 | AI 담당 작업 목록 |
 | `contracts/api-ai.openapi.yaml` | API↔AI 계약 |
 | `fixtures/` | 세 레포가 같이 쓰는 예시 데이터 (평가·smoke 스크립트 입력) |
 | `adr/0001-gpu-model-serving.md` | 모델·GPU 선택, 임베딩 고정 규칙, 시작 순서 |

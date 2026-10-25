@@ -1,5 +1,5 @@
 {
-  "_note": "임베딩 검색 평가 세트 (AI-03). docs는 기획서 4.4 청크 구성, queries는 JD 요건 한 줄. relevant가 빈 목록이면 맞는 경험이 없는 요건(오탐 확인용).",
+  "_note": "임베딩 검색 평가 세트 (AI-03). docs는 기획서 4.4 청크 구성, queries는 JD 요건 한 줄. relevant가 빈 목록이면 맞는 경험이 없는 요건(오탐 확인용). expansions는 사람이 쓴 약어 확장어(ADR-0001 요건 약어 확장 실험)이고, 질의는 `원문 (확장어1, 확장어2)`로 만든다(기획서 5.4).",
   "docs": [
     {"id": "sk_java", "type": "skill", "title": "Java", "text": "Java · language · 숙련도 3(실무 주력) · 사용처: OO커머스 결제플랫폼팀, 결제 승인 API 성능 개선"},
     {"id": "sk_spring", "type": "skill", "title": "Spring Boot", "text": "Spring Boot · framework · 숙련도 3(실무 주력) · 사용처: OO커머스 결제플랫폼팀, 결제 승인 API 성능 개선, 정산 배치 개선"},
@@ -17,19 +17,19 @@
     {"id": "e5", "type": "episode", "title": "스터디 모임 앱 - 모임 일정 알림 기능", "text": "역할: 개인 프로젝트 · 문제: 모임 일정을 자주 놓침 · 해결: React Native로 앱을 만들고 푸시 알림으로 일정 전날 알림 · 결과: 지인 20명이 3개월 사용"}
   ],
   "queries": [
-    {"text": "Kafka 등 메시지 큐 기반 비동기 처리 경험", "relevant": ["e1", "sk_kafka"]},
-    {"text": "대용량 트래픽 처리 경험", "relevant": ["e1", "e2"]},
-    {"text": "RDBMS 설계 및 쿼리 튜닝 경험", "relevant": ["e3", "sk_pg"]},
-    {"text": "장애 대응 및 운영 프로세스 개선 경험", "relevant": ["e2", "c1"]},
-    {"text": "MSA 환경에서의 서버 개발 경험", "relevant": ["c1"]},
-    {"text": "k8s 기반 컨테이너 운영 경험", "relevant": ["e4", "sk_k8s"]},
-    {"text": "CI/CD 파이프라인 구축 경험", "relevant": ["e4"]},
-    {"text": "Java/Spring 기반 백엔드 개발 3년 이상", "relevant": ["c1", "sk_spring", "sk_java"]},
-    {"text": "캐시 설계 경험 (Redis 등)", "relevant": ["e1", "sk_redis"]},
-    {"text": "결제 또는 정산 도메인 경험", "relevant": ["c1", "e1", "p1", "e3"]},
-    {"text": "모바일 앱 개발 경험", "relevant": ["e5", "sk_rn"]},
-    {"text": "iOS 네이티브 앱 개발 경험 (Swift)", "relevant": []},
-    {"text": "머신러닝 모델 서빙 경험", "relevant": []},
-    {"text": "TDD 및 테스트 코드 작성 문화 경험", "relevant": []}
+    {"text": "Kafka 등 메시지 큐 기반 비동기 처리 경험", "relevant": ["e1", "sk_kafka"], "expansions": []},
+    {"text": "대용량 트래픽 처리 경험", "relevant": ["e1", "e2"], "expansions": []},
+    {"text": "RDBMS 설계 및 쿼리 튜닝 경험", "relevant": ["e3", "sk_pg"], "expansions": ["관계형 데이터베이스"]},
+    {"text": "장애 대응 및 운영 프로세스 개선 경험", "relevant": ["e2", "c1"], "expansions": []},
+    {"text": "MSA 환경에서의 서버 개발 경험", "relevant": ["c1"], "expansions": ["마이크로서비스 아키텍처"]},
+    {"text": "k8s 기반 컨테이너 운영 경험", "relevant": ["e4", "sk_k8s"], "expansions": ["Kubernetes"]},
+    {"text": "CI/CD 파이프라인 구축 경험", "relevant": ["e4"], "expansions": ["지속적 통합", "지속적 배포"]},
+    {"text": "Java/Spring 기반 백엔드 개발 3년 이상", "relevant": ["c1", "sk_spring", "sk_java"], "expansions": []},
+    {"text": "캐시 설계 경험 (Redis 등)", "relevant": ["e1", "sk_redis"], "expansions": []},
+    {"text": "결제 또는 정산 도메인 경험", "relevant": ["c1", "e1", "p1", "e3"], "expansions": []},
+    {"text": "모바일 앱 개발 경험", "relevant": ["e5", "sk_rn"], "expansions": []},
+    {"text": "iOS 네이티브 앱 개발 경험 (Swift)", "relevant": [], "expansions": []},
+    {"text": "머신러닝 모델 서빙 경험", "relevant": [], "expansions": []},
+    {"text": "TDD 및 테스트 코드 작성 문화 경험", "relevant": [], "expansions": ["테스트 주도 개발"]}
   ]
 }

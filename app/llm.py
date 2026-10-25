@@ -8,7 +8,7 @@ from app.config import LLM_MAX_MODEL_LEN, LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT, 
 client = httpx.AsyncClient(base_url=VLLM_URL, timeout=httpx.Timeout(LLM_TIMEOUT, connect=2))
 
 
-async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048) -> str:
+async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048, temperature: float | None = None) -> str:
     body = {
         "model": LLM_MODEL,
         "messages": messages,
@@ -16,6 +16,8 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
         "chat_template_kwargs": {"enable_thinking": False},  # thinking 끔 (Kaggle에서 확인)
         **LLM_SAMPLING,
     }
+    if temperature is not None:  # 추출처럼 답이 하나인 작업은 0 (P2)
+        body["temperature"] = temperature
     if schema:
         body["response_format"] = {"type": "json_schema", "json_schema": {"name": "out", "schema": schema}}
     r = await client.post("/v1/chat/completions", json=body)
@@ -47,13 +49,14 @@ def strict_schema(schema: dict) -> dict:
     return schema
 
 
-async def generate[T: BaseModel](messages: list[dict], out: type[T], check=None, max_tokens: int = 2048) -> tuple[T, list[str]]:
+async def generate[T: BaseModel](messages: list[dict], out: type[T], check=None, max_tokens: int = 2048,
+                                 temperature: float | None = None) -> tuple[T, list[str]]:
     """스키마로 출력을 강제하고 검증한다. 형식 오류나 check()가 돌려준 문제가 있으면 1회 다시 요청한다.
     두 번째도 형식이 틀리면 502, 내용 문제만 남으면 (결과, 남은 문제)를 돌려줘 호출한 쪽이 처리한다."""
     obj, problems = None, []
     for _ in range(2):
         try:
-            raw = await chat(messages, schema=strict_schema(out.model_json_schema()), max_tokens=max_tokens)
+            raw = await chat(messages, schema=strict_schema(out.model_json_schema()), max_tokens=max_tokens, temperature=temperature)
         except httpx.HTTPStatusError as e:
             # vLLM이 요청을 거부함 (예: 400 입력이 문맥 한도를 넘음). 그대로 두면 500 → API가 같은 요청을 다시 보낸다
             raise HTTPException(502, f"llm error {e.response.status_code}: {e.response.text[:200]}")

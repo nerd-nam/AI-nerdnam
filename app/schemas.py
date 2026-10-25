@@ -108,9 +108,11 @@ class ExtractRequest(BaseModel):
 
 
 class ExtractedLine(BaseModel):
-    """문구는 돌려주지 않는다(바꾸지 않으므로). 기술명은 원문 그대로, 정규화는 API가 한다"""
+    """문구는 돌려주지 않는다(바꾸지 않으므로). 기술명은 원문 그대로, 정규화는 API가 한다.
+    expansions: 줄에 쓰인 약어의 풀네임·같은 뜻의 다른 표기(관련어 아님). 없으면 빈 목록. API가 검색 질의 확장에 쓴다"""
     id: int
     skills_raw: list[str]
+    expansions: list[str]
     min_years: int | None = None
 
 
