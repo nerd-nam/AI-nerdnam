@@ -56,8 +56,8 @@ def test_extract_skills_expansions_and_years(llm_replies):
             {"id": 14, "skills_raw": ["kafka"]},  # 대소문자 차이는 줄에 있는 것으로 봄
         ]}],
         abbr=[{"lines": [{"id": 12, "abbreviations": [
-            {"abbr": "RDBMS", "full": ["관계형 데이터베이스"]},
-            {"abbr": "MSA", "full": ["마이크로서비스 아키텍처"]},  # 줄에 없는 약어 → 버림
+            {"abbr": "RDBMS", "full": ["관계형 데이터베이스"], "is_name": False, "ambiguous": False},
+            {"abbr": "MSA", "full": ["마이크로서비스 아키텍처"], "is_name": False, "ambiguous": False},  # 줄에 없는 약어 → 버림
         ]}]}],
     )
     r = c.post("/requirements/extract", json={"lines": LINES}).json()
@@ -79,13 +79,27 @@ def test_no_candidates_no_abbr_call(llm_replies):
 def test_clean_expansions():
     text = "RDBMS(관계형 DB) 설계 및 쿼리 튜닝 경험"
 
-    def line(*full, abbr="RDBMS"):
-        return P2AbbrLine(id=1, abbreviations=[P2Abbr(abbr=abbr, full=list(full))])
+    def line(*full, abbr="RDBMS", is_name=False, ambiguous=False):
+        return P2AbbrLine(id=1, abbreviations=[P2Abbr(abbr=abbr, full=list(full), is_name=is_name, ambiguous=ambiguous)])
     assert clean_expansions(line("관계형 DB", " 관계형  db "), text) == []  # 줄에 이미 있는 말 (공백·대소문자 무시)
     assert clean_expansions(line("관계형 데이터베이스", "관계형데이터베이스", "", "  "), text) == ["관계형 데이터베이스"]  # 중복·빈 값
     assert clean_expansions(line("a1", "b2", "c3", "d4"), text) == ["a1", "b2", "c3"]  # 최대 3개
     assert clean_expansions(line("마이크로서비스", abbr="MSA"), text) == []  # 줄에 없는 약어
     assert clean_expansions(None, text) == []
+    assert clean_expansions(line("Relational DB", ambiguous=True), text) == []  # 여러 뜻 → 버림
+    assert clean_expansions(line("Relational DB", is_name=True), text) == []  # 이름 → 버림
+    assert clean_expansions(line("Kubernetes", abbr="k8s", is_name=True), "k8s 운영 경험") == ["Kubernetes"]  # 숫자 줄임말은 이름 아님
+
+
+def test_missing_candidate_retried(llm_replies):
+    """후보를 건너뛰면 알려서 1회 다시 요청한다"""
+    skipped = {"lines": [{"id": 12, "abbreviations": []}]}
+    filled = {"lines": [{"id": 12, "abbreviations": [
+        {"abbr": "RDBMS", "full": ["관계형 데이터베이스"], "is_name": False, "ambiguous": False}]}]}
+    calls = llm_replies(skills=[{"lines": [{"id": 12, "skills_raw": ["RDBMS"]}]}], abbr=[skipped, filled])
+    r = c.post("/requirements/extract", json={"lines": [LINES[1]]}).json()
+    assert len(calls["abbr"]) == 2 and "12:RDBMS" in calls["abbr"][1][-1]["content"]
+    assert r["lines"][0]["expansions"] == ["관계형 데이터베이스"]
 
 
 def test_abbr_candidates():

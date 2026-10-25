@@ -2,14 +2,17 @@
 기술명·확장어는 LLM이, 연차는 정규식이 뽑는다. 연차는 표현이 정해져 있어 규칙이 더 정확하고 숫자를 지어낼 수 없다.
 
 기술명과 약어 확장어는 LLM을 따로(동시에) 부른다. 4B에게 한 번에 시키면 기술명을 빠뜨리고(9개 중 8 → 4~6)
-약어도 건너뛴다(GGUF Q8_0 확인 2026-10-25, ADR-0001 "요건 약어 확장 실험"). 두 프롬프트를 합쳐 버전 하나(p2_v2)로 본다."""
+약어도 건너뛴다(GGUF Q8_0 확인 2026-10-25, ADR-0001 "요건 약어 확장 실험"). 두 프롬프트를 합쳐 버전 하나(p2_v2)로 본다.
+
+약어 호출은 풀네임을 비워 둘 수 없게 하고(`full` 최소 1개), 이름·여러 뜻인지는 표시만 받아 코드가 버린다.
+비워 둘 수 있으면 약어 줄이 1~2개뿐인 요청(실제 공고 대부분)에서 4B가 거의 다 비웠다(한 줄씩 21/28 → 27/28, Mac bf16 2026-10-26)."""
 import asyncio
 import json
 import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app import llm, state
 from app.config import LLM_MODEL
@@ -40,7 +43,7 @@ def min_years(text: str) -> int | None:
 def abbr_candidates(text: str) -> list[str]:
     """줄의 약어 후보: 대문자가 절반 이상인 짧은 영문 토큰(MSA, CI/CD, IaC)이나 k8s 같은 줄임말.
     후보 없이 "약어를 찾아 풀어라"만 시키면 4B가 거의 다 비워 둔다(GGUF Q8_0 확인 2026-10-25). 후보를 주고 풀네임만 채우게 한다.
-    MySQL·iOS 같은 이름도 후보가 되지만 P2가 풀네임을 비운다."""
+    MySQL·iOS 같은 이름도 후보가 되지만 P2가 is_name으로 표시해 버린다."""
     out = []
     for tok in _TOKEN.findall(text):
         letters = tok.replace("/", "")
@@ -61,8 +64,15 @@ class P2Out(BaseModel):
 
 
 class P2Abbr(BaseModel):
-    abbr: str        # 줄에 쓰인 약어
-    full: list[str]  # 풀네임·같은 뜻의 다른 표기. 뜻이 정해지지 않으면 빈 목록
+    abbr: str                            # 줄에 쓰인 약어
+    full: list[str] = Field(min_length=1)  # 풀네임·같은 뜻의 다른 표기. 비울 수 없다 (비울 수 있으면 4B가 다 비움)
+    is_name: bool                        # 약어가 아니라 제품 이름 그 자체(MySQL, iOS) → 버림
+    ambiguous: bool                      # 뜻이 여러 개이고 문맥으로 정해지지 않음(PM, SM) → 버림
+
+
+def _keep(a: P2Abbr) -> bool:
+    # k8s·i18n 같은 숫자 줄임말은 이름일 수 없다. 모델이 k8s를 "Kubernetes라는 이름"으로 보고 is_name을 켜기도 한다
+    return not a.ambiguous and (not a.is_name or bool(_NUMERONYM.fullmatch(a.abbr)))
 
 
 class P2AbbrLine(BaseModel):
@@ -83,10 +93,10 @@ def _in_text(word: str, text: str) -> bool:
 
 
 def clean_expansions(line: P2AbbrLine | None, text: str) -> list[str]:
-    """줄에 실제로 있는 약어의 확장어만 모으고(줄에 없는 약어는 지어낸 것), 줄에 이미 있는 말·빈 값·중복(공백·대소문자 무시)을
+    """이름·여러 뜻이 아닌, 줄에 실제로 있는 약어의 확장어만 모으고(줄에 없는 약어는 지어낸 것), 줄에 이미 있는 말·빈 값·중복(공백·대소문자 무시)을
     버리고 최대 3개 (기획서 5.5 AI 쪽 응답 정리)"""
     out, seen = [], set()
-    for s in (f.strip() for a in (line.abbreviations if line else []) if _in_text(a.abbr, text) for f in a.full):
+    for s in (f.strip() for a in (line.abbreviations if line else []) if _keep(a) and _in_text(a.abbr, text) for f in a.full):
         if not s or _in_text(s, text) or _norm(s) in seen:
             continue
         seen.add(_norm(s))
@@ -118,8 +128,13 @@ async def _abbreviations(req: ExtractRequest) -> dict[int, P2AbbrLine]:
         {"role": "user", "content": json.dumps({"lines": todo}, ensure_ascii=False)},
     ]
     want = [t["id"] for t in todo]
-    out, _ = await llm.generate(messages, P2AbbrOut, check=lambda o: _id_problems(want, [x.id for x in o.lines]),
-                                max_tokens=1024, temperature=TEMPERATURE)
+
+    def check(o: P2AbbrOut) -> list[str]:
+        got = {(x.id, a.abbr) for x in o.lines for a in x.abbreviations}
+        missing = [f"{t['id']}:{c}" for t in todo for c in t["abbr_candidates"] if (t["id"], c) not in got]
+        return _id_problems(want, [x.id for x in o.lines]) + (
+            [f"abbr_candidates {missing}를 abbreviations에 적지 않음. 후보마다 하나씩 적는다"] if missing else [])
+    out, _ = await llm.generate(messages, P2AbbrOut, check=check, max_tokens=1024, temperature=TEMPERATURE)
     return {x.id: x for x in out.lines}
 
 

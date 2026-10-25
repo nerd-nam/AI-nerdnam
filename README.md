@@ -110,7 +110,8 @@ curl localhost:8001/health
 ② GGUF (①이 안 될 때) — llama.cpp `llama-server`
 
 ```bash
-llama-server -hf bartowski/Qwen_Qwen3.5-4B-GGUF:bf16 --port 8001 --ctx-size 8192 --jinja --reasoning-budget 0
+llama-server -hf bartowski/Qwen_Qwen3.5-4B-GGUF:bf16 --no-mmproj --port 8001 --ctx-size 8192 --jinja --reasoning-budget 0
+# --no-mmproj: 이미지 입력용 부분은 올리지 않음 (텍스트만 씀, 메모리 절약)
 # 메모리가 부족하면 :bf16 대신 :Q8_0 (4.6GB)
 ```
 
@@ -132,11 +133,13 @@ uv run python evals/smoke_report.py ../SPEC-nerdnam/fixtures                    
 **4단계 (선택): 요건 약어 확장어 확인 (AI-16)** — 28줄을 P2에 보내고, 나온 확장어로 검색 순위를 비교합니다.
 
 ```bash
-uv run python -m evals.extract_eval                                           # → evals/out/extract.json
+uv run python -m evals.extract_eval                                           # 8줄 묶음 + 한 줄씩 → evals/out/extract.json
+# AI 서버를 끈 뒤 (임베딩 모델을 한 번 더 올리므로 16GB Mac은 메모리가 부족함)
 uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # 원문 / 사람 확장어 / P2 확장어 순위
 ```
 
 - ① 원본 모델이면 `.env`의 `LLM_MODEL`을 그대로, ② GGUF면 `local/Qwen3.5-4B-gguf`로 둡니다. 결과 JSON의 `model` 값으로 어떤 모델로 쟀는지 구분합니다.
+- 포트 8000을 다른 프로그램이 쓰면 AI 서버를 다른 포트로 띄우고 `AI_URL=http://localhost:8010`처럼 알려 줍니다.
 - P2는 온도 0입니다. ①은 항상 같은 답을 고르므로(`do_sample=False`) 결과가 같습니다.
 
 **주의**

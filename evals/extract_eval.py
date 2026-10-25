@@ -6,6 +6,9 @@
 판정: ok / 검토(allowed에 없는 확장어: 관련어·틀린 뜻일 수 있음) / 빠짐(need인데 비어 있음).
 기술명(skills_raw)은 기대값과 비교해 빠진 것·더한 것을 센다 (확장어 프롬프트를 바꾸며 기술명이 나빠지지 않았는지 확인).
 "검토"는 틀렸다는 뜻이 아니라 사람이 봐야 한다는 뜻이다. allowed에 넣을지 프롬프트를 고칠지 정한다.
+
+묶음(8줄)과 한 줄씩 두 번 잰다. 실제 공고는 약어 줄이 1~2개뿐이라, 묶음에서만 맞고 한 줄씩은 비우는 경우를 잡기 위해서다
+(p2_v2 첫 버전이 묶음 26/28, 한 줄씩 21/28이었다). 결과 JSON은 묶음 결과다.
 """
 import json
 import os
@@ -61,6 +64,17 @@ if __name__ == "__main__":
     missed = [(r["text"], s) for r in rows for s in r["skills"] if s not in r["skills_raw"]]
     extra = [(r["text"], s) for r in rows for s in r["skills_raw"] if s not in r["skills"]]
     print(f"기술명 {want - len(missed)}/{want}  빠짐 {missed}  추가 {extra}")
+
+    solo = 0
+    print("\n[한 줄씩]")
+    for c in cases:
+        r, _ = post({"lines": [{"id": 1, "type": "required", "text": c["text"]}]})
+        e = r["lines"][0]["expansions"]
+        v = verdict(c, e)
+        solo += v == "ok"
+        if v != "ok":
+            print(f"  {v} {c['text']}  → {e}")
+    print(f"한 줄씩 ok {solo}/{len(cases)}")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps({**meta, "lines": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
