@@ -185,6 +185,7 @@ uv run python -m evals.extract_eval                               # P2 약어 �
 uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # P2 확장어로 검색 순위 비교
 uv run --extra model python -m evals.search_eval                 # 검색 후보 구성 비교 (D-12): 지금 방식 / 종류별 상위 N / RRF
 uv run python -m evals.match_eval                                # 요건 판정 평가 (ADR-0006, real 모드 서버를 띄운 뒤)
+uv run python -m evals.guide_eval                                # 작성 방향 근거 정확도 (기획서 9.1, 생성 뒤 줄마다 ok 검수 → --score)
 
 uv run python -m evals.load_test                                  # 동시 요청 부하 테스트 (GPU 서버, compose 실행 후)
 ```
@@ -216,6 +217,7 @@ AI-nerdnam/
 │   ├── extract_eval.py       P2 약어 확장어 확인 (extract_cases.json)
 │   ├── search_eval.py        검색 후보 구성 비교 D-12 (search_cases.json, 사용자 4명)
 │   ├── match_eval.py         요건 판정 평가 ADR-0006 (match_cases.json, 요건 70줄)
+│   ├── guide_eval.py         작성 방향 근거 정확도 (match_cases.json 정답으로 텍스트 탭 4개)
 │   ├── load_test.py          부하 테스트
 │   ├── local_llm.py          Mac용 로컬 LLM 서버 (vLLM 대신)
 │   ├── smoke_restructure.py  /restructure 흐름 확인
