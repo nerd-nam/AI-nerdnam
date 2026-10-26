@@ -110,8 +110,9 @@ curl localhost:8001/health
 ② GGUF (①이 안 될 때) — llama.cpp `llama-server`
 
 ```bash
-llama-server -hf bartowski/Qwen_Qwen3.5-4B-GGUF:bf16 --no-mmproj --port 8001 --ctx-size 8192 --jinja --reasoning-budget 0
+llama-server -hf bartowski/Qwen_Qwen3.5-4B-GGUF:bf16 --no-mmproj --port 8001 --ctx-size 8192 --parallel 1 --jinja --reasoning-budget 0
 # --no-mmproj: 이미지 입력용 부분은 올리지 않음 (텍스트만 씀, 메모리 절약)
+# --parallel 1: 기본은 슬롯 4개가 문맥 8192를 나눠 써서, /match처럼 동시에 여러 번 부르면 "Context size has been exceeded"로 502가 난다
 # 메모리가 부족하면 :bf16 대신 :Q8_0 (4.6GB)
 ```
 
@@ -183,6 +184,7 @@ uv run --extra model python -m evals.embed_eval --compare-full    # 텍스트 �
 uv run python -m evals.extract_eval                               # P2 약어 확장어 확인 (real 모드 서버를 띄운 뒤)
 uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # P2 확장어로 검색 순위 비교
 uv run --extra model python -m evals.search_eval                 # 검색 후보 구성 비교 (D-12): 지금 방식 / 종류별 상위 N / RRF
+uv run python -m evals.match_eval                                # 요건 판정 평가 (ADR-0006, real 모드 서버를 띄운 뒤)
 
 uv run python -m evals.load_test                                  # 동시 요청 부하 테스트 (GPU 서버, compose 실행 후)
 ```
@@ -213,6 +215,7 @@ AI-nerdnam/
 │   ├── embed_eval.py         임베딩 검색 품질 (약어 확장어 비교 포함)
 │   ├── extract_eval.py       P2 약어 확장어 확인 (extract_cases.json)
 │   ├── search_eval.py        검색 후보 구성 비교 D-12 (search_cases.json, 사용자 4명)
+│   ├── match_eval.py         요건 판정 평가 ADR-0006 (match_cases.json, 요건 70줄)
 │   ├── load_test.py          부하 테스트
 │   ├── local_llm.py          Mac용 로컬 LLM 서버 (vLLM 대신)
 │   ├── smoke_restructure.py  /restructure 흐름 확인
