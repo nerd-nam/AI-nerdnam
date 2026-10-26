@@ -2,13 +2,14 @@
 탭마다 1회, 그 탭의 content 스키마로 생성한다. 이미지 탭은 P5, 나머지는 P4."""
 import json
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
 from app import llm, state
 from app.config import LLM_MODEL
 from app.schemas import (CareerContent, Coverage, GuideRequest, GuideResponse, ImageContent, ImagePrompt,
-                         IntroContent, MotiveContent, Page, Paragraph, PortfolioContent, Rewrite, ToolVisual)
+                         IntroContent, MotiveContent, Page, PageKind, Paragraph, PortfolioContent, Rewrite, ToolVisual)
 from app.validators import unsupported_numbers
 
 router = APIRouter()
@@ -113,7 +114,7 @@ def _clean(o, req: GuideRequest):
 
 def _stub_content(req: GuideRequest, cited: list[int]):
     """탭별 content 모양 그대로의 가짜 응답. FE·BE가 GPU 없이 개발할 때 쓴다 (AI 이슈 #9)"""
-    common = dict(
+    common: dict[str, Any] = dict(
         tab=req.tab,
         message=f"(stub) {req.tab} 핵심 메시지",
         outline=[Paragraph(title="(stub) 문단 1", detail="(stub) 근거 경험으로 쓰기", sources=cited)],
@@ -128,7 +129,7 @@ def _stub_content(req: GuideRequest, cited: list[int]):
             return IntroContent(**common, coverage=[
                 Coverage(requirement_id=r.id, covered=r.verdict != "unmet", where="(stub) 문단 1") for r in reqs])
         case "portfolio":
-            kinds = ["cover", "text", "diagram", "chart"]
+            kinds: list[PageKind] = ["cover", "text", "diagram", "chart"]
             return PortfolioContent(**common, pages=[
                 Page(order=i, title=f"(stub) {i}쪽", hint="(stub) 내용", kind=k, sources=cited if k != "cover" else [])
                 for i, k in enumerate(kinds, 1)])

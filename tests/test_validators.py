@@ -63,6 +63,8 @@ def test_find_span_ignores_spacing():
     from app.validators import find_span
     text = "평균 응답이 1.2초까지 늘었고\n\nKafka로 비동기 분리했다."
     assert find_span("1.2 초까지 늘었고", text) == (text.find("1.2초"), text.find("늘었고") + 3)
-    s, e = find_span("늘었고 Kafka 로 비동기", text)
+    span = find_span("늘었고 Kafka 로 비동기", text)
+    assert span
+    s, e = span
     assert text[s:e] == "늘었고\n\nKafka로 비동기"
     assert find_span("없는 문장", text) is None and find_span("  ", text) is None

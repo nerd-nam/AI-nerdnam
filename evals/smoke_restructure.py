@@ -1,6 +1,6 @@
 """로컬 real 모드 /restructure 확인: SPEC fixtures 프로젝트 102로 initial → split → episode를 차례로 호출한다.
 사용: AI_URL=http://localhost:8000 python evals/smoke_restructure.py ../SPEC-nerdnam/fixtures/projects.json"""
-import json, os, sys, time, urllib.request
+import json, os, sys, time, urllib.error, urllib.request
 
 AI = os.getenv("AI_URL", "http://localhost:8000")
 P = next(p for p in json.load(open(sys.argv[1]))["projects"] if p["project_id"] == 102)

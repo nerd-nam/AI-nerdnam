@@ -69,7 +69,7 @@ async def generate[T: BaseModel](messages: list[dict], out: type[T], check=None,
             problems = check(obj) if check else []
         except ValidationError as e:
             obj, problems = None, [f"JSON 형식 오류: {e.errors()[0]['msg']} ({e.errors()[0]['loc']})"]
-        if not problems:
+        if obj is not None and not problems:
             return obj, []
         messages = messages + [
             {"role": "assistant", "content": raw},
