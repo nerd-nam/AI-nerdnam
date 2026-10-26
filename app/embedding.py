@@ -2,7 +2,12 @@
 
 텍스트만 임베딩한다. 이미지·음성 인코더는 올리지 않는다.
 """
+import threading
+from contextlib import nullcontext
+
 from app.config import EMBED_DTYPE, EMBED_REPO, EMBED_REVISION
+
+_mps_lock = threading.Lock()
 
 
 def fmt(purpose: str, text: str, title: str | None = None) -> str:
@@ -29,4 +34,7 @@ def load(full: bool = False, dtype: str = EMBED_DTYPE, device: str | None = None
 
 def encode(model, purpose: str, items: list[tuple[str, str | None]]) -> list[list[float]]:
     texts = [fmt(purpose, text, title) for text, title in items]
-    return model.encode(texts, normalize_embeddings=True).tolist()
+    # MPS(Mac GPU)는 여러 스레드가 같은 모델을 동시에 쓰면 프로세스가 죽는다(SIGSEGV, 이슈 #22).
+    # /embed 는 요청마다 다른 스레드에서 돌므로 MPS일 때만 한 번에 하나씩 계산한다. CUDA·CPU는 그대로
+    with _mps_lock if model.device.type == "mps" else nullcontext():
+        return model.encode(texts, normalize_embeddings=True).tolist()
