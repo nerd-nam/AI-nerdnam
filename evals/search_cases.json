@@ -1,0 +1,2009 @@
+{
+ "_note": "검색 후보 구성 비교 세트 (D-12, AI-11). 사용자 4명, 청크는 기획서 4.4·fixtures/chunks.json 형식. skills는 청크 메타데이터(정규화 기술명), 질의 skills는 요건의 정규화 기술명. relevant는 근거가 될 청크(사람이 붙임), 빈 목록은 맞는 경험이 없는 요건. expansions는 사람이 쓴 약어 확장어. 요건 문구의 연차는 검색에 영향이 없다.",
+ "users": [
+  {
+   "user": "u1 백엔드 (커머스·결제)",
+   "docs": [
+    {
+     "id": "sk:Java",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Java"
+     ],
+     "text": "Java · language · 능숙 · 사용처: OO커머스, 결제 승인 API 성능 개선, 정산 배치 재설계"
+    },
+    {
+     "id": "sk:Kotlin",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Kotlin"
+     ],
+     "text": "Kotlin · language · 실무 사용 · 사용처: 주문 서비스 MSA 전환"
+    },
+    {
+     "id": "sk:Spring Boot",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Spring Boot"
+     ],
+     "text": "Spring Boot · framework · 능숙 · 사용처: OO커머스, 결제 승인 API 성능 개선, 주문 서비스 MSA 전환"
+    },
+    {
+     "id": "sk:JPA",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "JPA"
+     ],
+     "text": "JPA · framework · 능숙 · 사용처: OO커머스, 정산 배치 재설계"
+    },
+    {
+     "id": "sk:QueryDSL",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "QueryDSL"
+     ],
+     "text": "QueryDSL · framework · 실무 사용 · 사용처: 정산 배치 재설계"
+    },
+    {
+     "id": "sk:Spring Batch",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Spring Batch"
+     ],
+     "text": "Spring Batch · framework · 실무 사용 · 사용처: 정산 배치 재설계"
+    },
+    {
+     "id": "sk:MySQL",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "MySQL"
+     ],
+     "text": "MySQL · database · 능숙 · 사용처: OO커머스, 정산 배치 재설계"
+    },
+    {
+     "id": "sk:PostgreSQL",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "PostgreSQL"
+     ],
+     "text": "PostgreSQL · database · 학습 중"
+    },
+    {
+     "id": "sk:Redis",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Redis"
+     ],
+     "text": "Redis · database · 실무 사용 · 사용처: 결제 승인 API 성능 개선"
+    },
+    {
+     "id": "sk:Kafka",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Kafka"
+     ],
+     "text": "Kafka · infra · 실무 사용 · 사용처: 결제 승인 API 성능 개선, 주문 서비스 MSA 전환"
+    },
+    {
+     "id": "sk:RabbitMQ",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "RabbitMQ"
+     ],
+     "text": "RabbitMQ · infra · 학습 중"
+    },
+    {
+     "id": "sk:Elasticsearch",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Elasticsearch"
+     ],
+     "text": "Elasticsearch · database · 실무 사용 · 사용처: 검색 서비스 구축"
+    },
+    {
+     "id": "sk:Docker",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Docker"
+     ],
+     "text": "Docker · infra · 실무 사용 · 사용처: 주문 서비스 MSA 전환, 사내 배포 파이프라인 정비"
+    },
+    {
+     "id": "sk:Kubernetes",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Kubernetes"
+     ],
+     "text": "Kubernetes · infra · 학습 중 · 사용처: 주문 서비스 MSA 전환"
+    },
+    {
+     "id": "sk:AWS",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "AWS"
+     ],
+     "text": "AWS · infra · 실무 사용 · 사용처: OO커머스"
+    },
+    {
+     "id": "sk:Jenkins",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Jenkins"
+     ],
+     "text": "Jenkins · tool · 실무 사용 · 사용처: 사내 배포 파이프라인 정비"
+    },
+    {
+     "id": "sk:GitHub Actions",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "GitHub Actions"
+     ],
+     "text": "GitHub Actions · tool · 실무 사용 · 사용처: 사내 배포 파이프라인 정비"
+    },
+    {
+     "id": "sk:Prometheus",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Prometheus"
+     ],
+     "text": "Prometheus · tool · 실무 사용 · 사용처: 결제 승인 API 성능 개선"
+    },
+    {
+     "id": "sk:Grafana",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Grafana"
+     ],
+     "text": "Grafana · tool · 실무 사용 · 사용처: 결제 승인 API 성능 개선"
+    },
+    {
+     "id": "sk:JUnit",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "JUnit"
+     ],
+     "text": "JUnit · tool · 능숙 · 사용처: OO커머스"
+    },
+    {
+     "id": "sk:nGrinder",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "nGrinder"
+     ],
+     "text": "nGrinder · tool · 실무 사용 · 사용처: 결제 승인 API 성능 개선"
+    },
+    {
+     "id": "sk:Git",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Git"
+     ],
+     "text": "Git · tool · 능숙"
+    },
+    {
+     "id": "c1",
+     "type": "career",
+     "title": null,
+     "skills": [
+      "Java",
+      "Kotlin",
+      "Spring Boot",
+      "JPA",
+      "MySQL",
+      "Redis",
+      "Kafka"
+     ],
+     "text": "OO커머스 · 결제플랫폼팀 백엔드 개발자 · 2022-03 ~ 재직 중 · 주요 업무: 결제 승인·취소 API 설계와 운영, 정산 배치 개발, 주문 서비스 분리 · 기술: Java, Kotlin, Spring Boot, JPA, MySQL, Redis, Kafka"
+    },
+    {
+     "id": "c2",
+     "type": "career",
+     "title": null,
+     "skills": [
+      "Java",
+      "Spring Boot",
+      "MySQL",
+      "Elasticsearch"
+     ],
+     "text": "△△소프트 · 백엔드 개발자 · 2020-07 ~ 2022-02 · 주요 업무: B2B 예약 시스템 API 개발, 상품 검색 기능 개발 · 기술: Java, Spring Boot, MySQL, Elasticsearch"
+    },
+    {
+     "id": "c3",
+     "type": "career",
+     "title": null,
+     "skills": [
+      "Java",
+      "Spring Boot",
+      "JUnit"
+     ],
+     "text": "□□스타트업 · 인턴 개발자 · 2020-01 ~ 2020-06 · 주요 업무: 관리자 페이지 API와 테스트 코드 작성 · 기술: Java, Spring Boot, JUnit"
+    },
+    {
+     "id": "p1",
+     "type": "project_summary",
+     "title": "결제 승인 API 성능 개선",
+     "skills": [
+      "Spring Boot",
+      "Redis",
+      "Kafka",
+      "nGrinder"
+     ],
+     "text": "역할: 백엔드 리드 (팀 4명) · 기술: Spring Boot, Redis, Kafka, nGrinder · 사례: 결제 승인 응답 지연 개선 (평균 1.2초 → 0.3초), 프로모션 전 부하 테스트 절차 도입"
+    },
+    {
+     "id": "p2",
+     "type": "project_summary",
+     "title": "정산 배치 재설계",
+     "skills": [
+      "Spring Batch",
+      "MySQL",
+      "JPA",
+      "QueryDSL"
+     ],
+     "text": "역할: 백엔드 개발자 · 기술: Spring Batch, MySQL, JPA, QueryDSL · 사례: 정산 배치 마감 시간 초과 해결, 정산 대사 불일치 자동 검출"
+    },
+    {
+     "id": "p3",
+     "type": "project_summary",
+     "title": "주문 서비스 MSA 전환",
+     "skills": [
+      "Kotlin",
+      "Spring Boot",
+      "Kafka",
+      "Docker",
+      "Kubernetes"
+     ],
+     "text": "역할: 백엔드 개발자 (팀 6명) · 기술: Kotlin, Spring Boot, Kafka, Docker, Kubernetes · 사례: 주문 서비스를 모놀리스에서 분리, 서비스 간 데이터 정합성 보장"
+    },
+    {
+     "id": "p4",
+     "type": "project_summary",
+     "title": "검색 서비스 구축",
+     "skills": [
+      "Elasticsearch",
+      "Spring Boot"
+     ],
+     "text": "역할: 백엔드 개발자 · 기술: Elasticsearch, Spring Boot · 사례: 상품 검색 응답 속도 개선, 한글 형태소 검색 품질 개선"
+    },
+    {
+     "id": "p5",
+     "type": "project_summary",
+     "title": "사내 배포 파이프라인 정비",
+     "skills": [
+      "Jenkins",
+      "GitHub Actions",
+      "Docker"
+     ],
+     "text": "역할: 백엔드 개발자 · 기술: Jenkins, GitHub Actions, Docker · 사례: 배포 시간 단축과 자동 롤백"
+    },
+    {
+     "id": "e1",
+     "type": "episode",
+     "title": "결제 승인 API 성능 개선 · 결제 승인 응답 지연 개선",
+     "skills": [
+      "Redis",
+      "Kafka",
+      "Spring Boot"
+     ],
+     "text": "역할: 백엔드 리드 (팀 4명) · 문제: 프로모션 기간 결제 승인 응답이 평균 1.2초까지 느려져 결제 이탈 발생 · 해결: 가맹점 조회를 Redis 캐시로 전환, 승인 후처리를 Kafka 비동기로 분리 · 결과: 평균 응답 1.2초 → 0.3초, 피크 TPS 약 2배를 장애 없이 처리"
+    },
+    {
+     "id": "e2",
+     "type": "episode",
+     "title": "결제 승인 API 성능 개선 · 프로모션 전 부하 테스트 절차 도입",
+     "skills": [
+      "nGrinder",
+      "Grafana",
+      "Prometheus"
+     ],
+     "text": "역할: 백엔드 리드 (팀 4명) · 문제: 트래픽 급증 시점마다 장애가 반복되었지만 사전 검증 절차가 없음 · 해결: nGrinder로 피크 시나리오 부하 테스트를 만들고 Grafana 대시보드로 병목을 확인하는 절차 도입 · 결과: 프로모션 3회 연속 장애 0건"
+    },
+    {
+     "id": "e3",
+     "type": "episode",
+     "title": "정산 배치 재설계 · 정산 배치 마감 시간 초과 해결",
+     "skills": [
+      "Spring Batch",
+      "MySQL",
+      "JPA"
+     ],
+     "text": "역할: 백엔드 개발자 · 문제: 정산 배치가 마감 시간(오전 6시)을 넘겨 정산 담당자가 수작업으로 보정 · 해결: 실행 계획 분석으로 풀스캔 쿼리를 찾고 인덱스 재설계, 청크 단위 처리로 변경 · 결과: 배치 시간 4시간 → 50분"
+    },
+    {
+     "id": "e4",
+     "type": "episode",
+     "title": "정산 배치 재설계 · 정산 대사 불일치 자동 검출",
+     "skills": [
+      "Spring Batch",
+      "QueryDSL"
+     ],
+     "text": "역할: 백엔드 개발자 · 문제: PG사 정산 내역과 내부 결제 내역 불일치를 월말에 수작업으로 확인 · 해결: 일 단위 대사 배치와 불일치 알림을 만들고 원인 유형별 리포트 제공 · 결과: 불일치 확인 시간 월 2일 → 1시간"
+    },
+    {
+     "id": "e5",
+     "type": "episode",
+     "title": "주문 서비스 MSA 전환 · 주문 서비스를 모놀리스에서 분리",
+     "skills": [
+      "Kotlin",
+      "Kafka",
+      "Docker"
+     ],
+     "text": "역할: 백엔드 개발자 (팀 6명) · 문제: 모놀리스 배포 시 주문 기능까지 함께 중단되고 팀 간 배포 충돌이 잦음 · 해결: 주문 도메인을 별도 서비스로 분리하고 Kafka 이벤트로 결제·재고와 연동, Docker 이미지로 배포 · 결과: 주문 서비스 단독 배포 가능, 배포 충돌 월 5회 → 0회"
+    },
+    {
+     "id": "e6",
+     "type": "episode",
+     "title": "주문 서비스 MSA 전환 · 서비스 간 데이터 정합성 보장",
+     "skills": [
+      "Kafka",
+      "Spring Boot"
+     ],
+     "text": "역할: 백엔드 개발자 (팀 6명) · 문제: 서비스 분리 후 결제 실패 시 주문 상태가 맞지 않는 문제 · 해결: 아웃박스 패턴과 보상 트랜잭션(사가)으로 이벤트 발행·처리를 보장 · 결과: 주문·결제 상태 불일치 주 20건 → 0건"
+    },
+    {
+     "id": "e7",
+     "type": "episode",
+     "title": "검색 서비스 구축 · 상품 검색 응답 속도 개선",
+     "skills": [
+      "Elasticsearch"
+     ],
+     "text": "역할: 백엔드 개발자 · 문제: MySQL LIKE 검색으로 상품 검색이 2초 이상 걸림 · 해결: Elasticsearch 색인을 만들고 상품 변경을 실시간 색인 · 결과: 검색 응답 2초 → 150ms"
+    },
+    {
+     "id": "e8",
+     "type": "episode",
+     "title": "검색 서비스 구축 · 한글 형태소 검색 품질 개선",
+     "skills": [
+      "Elasticsearch"
+     ],
+     "text": "역할: 백엔드 개발자 · 문제: 띄어쓰기·복합어 때문에 원하는 상품이 검색되지 않는다는 문의 · 해결: nori 형태소 분석기와 동의어 사전 적용 · 결과: 검색 실패 문의 월 40건 → 8건"
+    },
+    {
+     "id": "e9",
+     "type": "episode",
+     "title": "사내 배포 파이프라인 정비 · 배포 시간 단축과 자동 롤백",
+     "skills": [
+      "GitHub Actions",
+      "Jenkins",
+      "Docker"
+     ],
+     "text": "역할: 백엔드 개발자 · 문제: 수동 배포에 30분이 걸리고 장애 시 되돌리기가 늦음 · 해결: Jenkins 파이프라인을 GitHub Actions로 옮기고 헬스 체크 실패 시 자동 롤백 · 결과: 배포 30분 → 7분, 롤백 1분 이내"
+    }
+   ],
+   "queries": [
+    {
+     "text": "Java/Spring 기반 백엔드 개발 경험",
+     "skills": [
+      "Java",
+      "Spring Boot"
+     ],
+     "relevant": [
+      "sk:Java",
+      "sk:Spring Boot",
+      "c1",
+      "c2"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "대용량 트래픽 처리 경험",
+     "skills": [],
+     "relevant": [
+      "e1",
+      "e2",
+      "p1"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "RDBMS 설계 및 쿼리 튜닝 경험",
+     "skills": [
+      "MySQL"
+     ],
+     "relevant": [
+      "e3",
+      "sk:MySQL",
+      "p2"
+     ],
+     "expansions": [
+      "Relational Database Management System",
+      "관계형 데이터베이스 관리 시스템"
+     ]
+    },
+    {
+     "text": "MSA 환경에서의 서버 개발 경험",
+     "skills": [],
+     "relevant": [
+      "e5",
+      "e6",
+      "p3"
+     ],
+     "expansions": [
+      "Microservice Architecture",
+      "마이크로서비스 아키텍처"
+     ]
+    },
+    {
+     "text": "Kafka 등 메시지 큐 기반 비동기 처리 경험",
+     "skills": [
+      "Kafka"
+     ],
+     "relevant": [
+      "e1",
+      "e5",
+      "e6",
+      "sk:Kafka"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "장애 대응 및 서비스 안정성 개선 경험",
+     "skills": [],
+     "relevant": [
+      "e2",
+      "e9",
+      "e6"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "CI/CD 파이프라인 구축 경험",
+     "skills": [
+      "Jenkins",
+      "GitHub Actions"
+     ],
+     "relevant": [
+      "e9",
+      "p5",
+      "sk:GitHub Actions",
+      "sk:Jenkins"
+     ],
+     "expansions": [
+      "Continuous Integration",
+      "Continuous Delivery"
+     ]
+    },
+    {
+     "text": "검색 엔진(Elasticsearch) 운영 경험",
+     "skills": [
+      "Elasticsearch"
+     ],
+     "relevant": [
+      "e7",
+      "e8",
+      "sk:Elasticsearch",
+      "p4"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "결제·정산 도메인 경험",
+     "skills": [],
+     "relevant": [
+      "c1",
+      "e3",
+      "e4",
+      "p2",
+      "e1"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "성능 테스트 및 모니터링 경험",
+     "skills": [
+      "nGrinder",
+      "Grafana",
+      "Prometheus"
+     ],
+     "relevant": [
+      "e2",
+      "sk:nGrinder",
+      "sk:Grafana",
+      "sk:Prometheus"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "Go 언어 개발 경험",
+     "skills": [
+      "Go"
+     ],
+     "relevant": [],
+     "expansions": []
+    }
+   ]
+  },
+  {
+   "user": "u2 프론트엔드",
+   "docs": [
+    {
+     "id": "sk:TypeScript",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "TypeScript"
+     ],
+     "text": "TypeScript · language · 능숙 · 사용처: ◇◇마켓, 쇼핑몰 웹 리뉴얼, 디자인 시스템 구축"
+    },
+    {
+     "id": "sk:JavaScript",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "JavaScript"
+     ],
+     "text": "JavaScript · language · 능숙 · 사용처: ◇◇마켓, ☆☆에이전시"
+    },
+    {
+     "id": "sk:React",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "React"
+     ],
+     "text": "React · framework · 능숙 · 사용처: ◇◇마켓, 쇼핑몰 웹 리뉴얼, 관리자 대시보드"
+    },
+    {
+     "id": "sk:Next.js",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Next.js"
+     ],
+     "text": "Next.js · framework · 실무 사용 · 사용처: 쇼핑몰 웹 리뉴얼, 웹 성능 개선"
+    },
+    {
+     "id": "sk:Redux",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Redux"
+     ],
+     "text": "Redux · framework · 실무 사용 · 사용처: ☆☆에이전시"
+    },
+    {
+     "id": "sk:React Query",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "React Query"
+     ],
+     "text": "React Query · framework · 실무 사용 · 사용처: 관리자 대시보드"
+    },
+    {
+     "id": "sk:Zustand",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Zustand"
+     ],
+     "text": "Zustand · framework · 실무 사용 · 사용처: 쇼핑몰 웹 리뉴얼"
+    },
+    {
+     "id": "sk:Tailwind CSS",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Tailwind CSS"
+     ],
+     "text": "Tailwind CSS · framework · 실무 사용 · 사용처: 디자인 시스템 구축"
+    },
+    {
+     "id": "sk:styled-components",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "styled-components"
+     ],
+     "text": "styled-components · framework · 실무 사용 · 사용처: ☆☆에이전시"
+    },
+    {
+     "id": "sk:Storybook",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Storybook"
+     ],
+     "text": "Storybook · tool · 실무 사용 · 사용처: 디자인 시스템 구축"
+    },
+    {
+     "id": "sk:Jest",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Jest"
+     ],
+     "text": "Jest · tool · 실무 사용 · 사용처: 디자인 시스템 구축"
+    },
+    {
+     "id": "sk:Testing Library",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Testing Library"
+     ],
+     "text": "Testing Library · tool · 실무 사용 · 사용처: 디자인 시스템 구축"
+    },
+    {
+     "id": "sk:Cypress",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Cypress"
+     ],
+     "text": "Cypress · tool · 학습 중"
+    },
+    {
+     "id": "sk:Vite",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Vite"
+     ],
+     "text": "Vite · tool · 실무 사용 · 사용처: 디자인 시스템 구축"
+    },
+    {
+     "id": "sk:Webpack",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Webpack"
+     ],
+     "text": "Webpack · tool · 실무 사용 · 사용처: ☆☆에이전시"
+    },
+    {
+     "id": "sk:GraphQL",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "GraphQL"
+     ],
+     "text": "GraphQL · framework · 학습 중"
+    },
+    {
+     "id": "sk:Node.js",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Node.js"
+     ],
+     "text": "Node.js · framework · 실무 사용 · 사용처: 실시간 주문 알림"
+    },
+    {
+     "id": "sk:WebSocket",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "WebSocket"
+     ],
+     "text": "WebSocket · framework · 실무 사용 · 사용처: 실시간 주문 알림"
+    },
+    {
+     "id": "sk:Sentry",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Sentry"
+     ],
+     "text": "Sentry · tool · 실무 사용 · 사용처: ◇◇마켓"
+    },
+    {
+     "id": "sk:Figma",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Figma"
+     ],
+     "text": "Figma · tool · 실무 사용 · 사용처: 디자인 시스템 구축"
+    },
+    {
+     "id": "sk:Vercel",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Vercel"
+     ],
+     "text": "Vercel · infra · 실무 사용 · 사용처: 쇼핑몰 웹 리뉴얼"
+    },
+    {
+     "id": "sk:Git",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Git"
+     ],
+     "text": "Git · tool · 능숙"
+    },
+    {
+     "id": "c1",
+     "type": "career",
+     "title": null,
+     "skills": [
+      "TypeScript",
+      "React",
+      "Next.js",
+      "React Query",
+      "Sentry"
+     ],
+     "text": "◇◇마켓 · 프론트엔드 개발자 · 2021-09 ~ 재직 중 · 주요 업무: 쇼핑몰 웹·관리자 화면 개발, 디자인 시스템 운영, 웹 성능 개선 · 기술: TypeScript, React, Next.js, React Query, Sentry"
+    },
+    {
+     "id": "c2",
+     "type": "career",
+     "title": null,
+     "skills": [
+      "JavaScript",
+      "React",
+      "Redux",
+      "styled-components",
+      "Webpack"
+     ],
+     "text": "☆☆에이전시 · 웹 퍼블리셔·프론트엔드 개발자 · 2019-03 ~ 2021-08 · 주요 업무: 고객사 웹사이트 구축, 반응형 마크업, 접근성 개선 · 기술: JavaScript, React, Redux, styled-components, Webpack"
+    },
+    {
+     "id": "p1",
+     "type": "project_summary",
+     "title": "쇼핑몰 웹 리뉴얼",
+     "skills": [
+      "Next.js",
+      "TypeScript",
+      "Zustand",
+      "Vercel"
+     ],
+     "text": "역할: 프론트엔드 리드 (팀 3명) · 기술: Next.js, TypeScript, Zustand, Vercel · 사례: CSR에서 SSR로 전환해 검색 유입 증가, 장바구니 상태 관리 단순화"
+    },
+    {
+     "id": "p2",
+     "type": "project_summary",
+     "title": "디자인 시스템 구축",
+     "skills": [
+      "React",
+      "Storybook",
+      "Tailwind CSS",
+      "Jest",
+      "Testing Library"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 기술: React, Storybook, Tailwind CSS, Jest, Testing Library · 사례: 공통 컴포넌트 라이브러리 구축, 웹 접근성 기준 적용"
+    },
+    {
+     "id": "p3",
+     "type": "project_summary",
+     "title": "관리자 대시보드",
+     "skills": [
+      "React",
+      "React Query",
+      "TypeScript"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 기술: React, React Query, TypeScript · 사례: 서버 상태 캐시로 중복 요청 제거"
+    },
+    {
+     "id": "p4",
+     "type": "project_summary",
+     "title": "실시간 주문 알림",
+     "skills": [
+      "WebSocket",
+      "Node.js",
+      "React"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 기술: WebSocket, Node.js, React · 사례: 판매자 실시간 주문 알림"
+    },
+    {
+     "id": "p5",
+     "type": "project_summary",
+     "title": "웹 성능 개선",
+     "skills": [
+      "Next.js",
+      "Sentry"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 기술: Next.js, Sentry · 사례: LCP 개선, 프론트엔드 오류 모니터링 도입"
+    },
+    {
+     "id": "e1",
+     "type": "episode",
+     "title": "쇼핑몰 웹 리뉴얼 · CSR에서 SSR로 전환해 검색 유입 증가",
+     "skills": [
+      "Next.js",
+      "TypeScript"
+     ],
+     "text": "역할: 프론트엔드 리드 (팀 3명) · 문제: 상품 상세가 CSR이라 검색 엔진에 노출되지 않음 · 해결: Next.js SSR·ISR로 상품 페이지를 전환하고 메타 태그 자동 생성 · 결과: 검색 유입 월 35% 증가"
+    },
+    {
+     "id": "e2",
+     "type": "episode",
+     "title": "쇼핑몰 웹 리뉴얼 · 장바구니 상태 관리 단순화",
+     "skills": [
+      "Zustand",
+      "TypeScript"
+     ],
+     "text": "역할: 프론트엔드 리드 (팀 3명) · 문제: Redux 보일러플레이트가 많아 장바구니 기능 수정에 시간이 오래 걸림 · 해결: Zustand로 전역 상태를 옮기고 서버 상태와 분리 · 결과: 장바구니 관련 코드 40% 감소, 버그 문의 감소"
+    },
+    {
+     "id": "e3",
+     "type": "episode",
+     "title": "디자인 시스템 구축 · 공통 컴포넌트 라이브러리 구축",
+     "skills": [
+      "Storybook",
+      "React",
+      "Jest",
+      "Testing Library",
+      "Tailwind CSS"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 문제: 화면마다 버튼·입력 컴포넌트가 달라 디자인 수정이 여러 곳에 필요 · 해결: Storybook 기반 컴포넌트 라이브러리와 Figma 토큰 연동, Jest·Testing Library 테스트 · 결과: 공통 컴포넌트 45개, 신규 화면 개발 기간 30% 단축"
+    },
+    {
+     "id": "e4",
+     "type": "episode",
+     "title": "디자인 시스템 구축 · 웹 접근성 기준 적용",
+     "skills": [
+      "React",
+      "Storybook"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 문제: 스크린 리더 사용자 문의와 공공기관 납품 요건 미충족 · 해결: WAI-ARIA 속성과 키보드 탐색을 컴포넌트에 기본 적용, 자동 접근성 검사 추가 · 결과: 접근성 검사 오류 120건 → 3건"
+    },
+    {
+     "id": "e5",
+     "type": "episode",
+     "title": "관리자 대시보드 · 서버 상태 캐시로 중복 요청 제거",
+     "skills": [
+      "React Query",
+      "React"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 문제: 대시보드 탭 이동마다 같은 API를 반복 호출해 화면이 느림 · 해결: React Query 캐시와 백그라운드 갱신 적용 · 결과: API 호출 수 60% 감소"
+    },
+    {
+     "id": "e6",
+     "type": "episode",
+     "title": "실시간 주문 알림 · 판매자 실시간 주문 알림",
+     "skills": [
+      "WebSocket",
+      "Node.js"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 문제: 판매자가 새 주문을 새로고침으로만 확인 · 해결: Node.js WebSocket 서버와 브라우저 알림 구현, 재연결 처리 · 결과: 주문 확인 평균 시간 12분 → 1분"
+    },
+    {
+     "id": "e7",
+     "type": "episode",
+     "title": "웹 성능 개선 · LCP 개선",
+     "skills": [
+      "Next.js"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 문제: 모바일 메인 페이지 LCP가 4.8초로 이탈률이 높음 · 해결: 이미지 최적화(next/image), 코드 분할, 폰트 지연 로딩 · 결과: LCP 4.8초 → 2.1초, 이탈률 18% 감소"
+    },
+    {
+     "id": "e8",
+     "type": "episode",
+     "title": "웹 성능 개선 · 프론트엔드 오류 모니터링 도입",
+     "skills": [
+      "Sentry"
+     ],
+     "text": "역할: 프론트엔드 개발자 · 문제: 사용자 화면 오류를 문의로만 알 수 있음 · 해결: Sentry 도입, 소스맵 업로드와 릴리스별 오류 추적 · 결과: 오류 인지 시간 하루 → 10분"
+    }
+   ],
+   "queries": [
+    {
+     "text": "React 기반 웹 서비스 개발 경험 3년 이상",
+     "skills": [
+      "React"
+     ],
+     "relevant": [
+      "sk:React",
+      "c1",
+      "c2"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "TypeScript 사용 경험",
+     "skills": [
+      "TypeScript"
+     ],
+     "relevant": [
+      "sk:TypeScript",
+      "c1",
+      "e1",
+      "e2"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "SSR/SEO 최적화 경험",
+     "skills": [],
+     "relevant": [
+      "e1",
+      "p1"
+     ],
+     "expansions": [
+      "Server-Side Rendering",
+      "Search Engine Optimization"
+     ]
+    },
+    {
+     "text": "웹 성능 최적화 경험",
+     "skills": [],
+     "relevant": [
+      "e7",
+      "e5",
+      "p5"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "디자인 시스템 구축 또는 운영 경험",
+     "skills": [],
+     "relevant": [
+      "e3",
+      "p2",
+      "c1"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "테스트 코드 작성 경험",
+     "skills": [
+      "Jest",
+      "Testing Library"
+     ],
+     "relevant": [
+      "e3",
+      "sk:Jest",
+      "sk:Testing Library"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "웹 접근성에 대한 이해",
+     "skills": [],
+     "relevant": [
+      "e4",
+      "c2"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "상태 관리 라이브러리 사용 경험",
+     "skills": [
+      "Redux",
+      "Zustand",
+      "React Query"
+     ],
+     "relevant": [
+      "e2",
+      "e5",
+      "sk:Redux",
+      "sk:Zustand",
+      "sk:React Query"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "실시간 통신 기능 개발 경험",
+     "skills": [
+      "WebSocket"
+     ],
+     "relevant": [
+      "e6",
+      "sk:WebSocket"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "React Native 앱 개발 경험",
+     "skills": [
+      "React Native"
+     ],
+     "relevant": [],
+     "expansions": []
+    }
+   ]
+  },
+  {
+   "user": "u3 데이터 엔지니어",
+   "docs": [
+    {
+     "id": "sk:Python",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Python"
+     ],
+     "text": "Python · language · 능숙 · 사용처: ▽▽플랫폼, 주문 데이터 파이프라인 구축"
+    },
+    {
+     "id": "sk:SQL",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "SQL"
+     ],
+     "text": "SQL · language · 능숙 · 사용처: ▽▽플랫폼"
+    },
+    {
+     "id": "sk:Scala",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Scala"
+     ],
+     "text": "Scala · language · 학습 중"
+    },
+    {
+     "id": "sk:Pandas",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Pandas"
+     ],
+     "text": "Pandas · framework · 능숙 · 사용처: ▽▽플랫폼"
+    },
+    {
+     "id": "sk:PySpark",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "PySpark"
+     ],
+     "text": "PySpark · framework · 실무 사용 · 사용처: 주문 데이터 파이프라인 구축"
+    },
+    {
+     "id": "sk:Airflow",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Airflow"
+     ],
+     "text": "Airflow · tool · 실무 사용 · 사용처: 주문 데이터 파이프라인 구축, 데이터 품질 관리"
+    },
+    {
+     "id": "sk:dbt",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "dbt"
+     ],
+     "text": "dbt · tool · 실무 사용 · 사용처: 데이터 웨어하우스 이전"
+    },
+    {
+     "id": "sk:Kafka",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Kafka"
+     ],
+     "text": "Kafka · infra · 실무 사용 · 사용처: 실시간 이벤트 수집"
+    },
+    {
+     "id": "sk:Flink",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Flink"
+     ],
+     "text": "Flink · framework · 학습 중 · 사용처: 실시간 이벤트 수집"
+    },
+    {
+     "id": "sk:BigQuery",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "BigQuery"
+     ],
+     "text": "BigQuery · database · 실무 사용 · 사용처: 데이터 웨어하우스 이전"
+    },
+    {
+     "id": "sk:Redshift",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Redshift"
+     ],
+     "text": "Redshift · database · 실무 사용 · 사용처: ▽▽플랫폼"
+    },
+    {
+     "id": "sk:PostgreSQL",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "PostgreSQL"
+     ],
+     "text": "PostgreSQL · database · 실무 사용 · 사용처: ▽▽플랫폼"
+    },
+    {
+     "id": "sk:AWS S3",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "AWS S3"
+     ],
+     "text": "AWS S3 · infra · 실무 사용 · 사용처: 주문 데이터 파이프라인 구축"
+    },
+    {
+     "id": "sk:Docker",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Docker"
+     ],
+     "text": "Docker · infra · 실무 사용 · 사용처: 추천 모델 서빙"
+    },
+    {
+     "id": "sk:Kubernetes",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Kubernetes"
+     ],
+     "text": "Kubernetes · infra · 실무 사용 · 사용처: 추천 모델 서빙"
+    },
+    {
+     "id": "sk:FastAPI",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "FastAPI"
+     ],
+     "text": "FastAPI · framework · 실무 사용 · 사용처: 추천 모델 서빙"
+    },
+    {
+     "id": "sk:scikit-learn",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "scikit-learn"
+     ],
+     "text": "scikit-learn · framework · 실무 사용 · 사용처: 추천 모델 서빙"
+    },
+    {
+     "id": "sk:PyTorch",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "PyTorch"
+     ],
+     "text": "PyTorch · framework · 학습 중"
+    },
+    {
+     "id": "sk:MLflow",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "MLflow"
+     ],
+     "text": "MLflow · tool · 실무 사용 · 사용처: 추천 모델 서빙"
+    },
+    {
+     "id": "sk:Great Expectations",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Great Expectations"
+     ],
+     "text": "Great Expectations · tool · 실무 사용 · 사용처: 데이터 품질 관리"
+    },
+    {
+     "id": "sk:Terraform",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Terraform"
+     ],
+     "text": "Terraform · tool · 학습 중"
+    },
+    {
+     "id": "sk:Tableau",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Tableau"
+     ],
+     "text": "Tableau · tool · 실무 사용 · 사용처: ◎◎리서치"
+    },
+    {
+     "id": "c1",
+     "type": "career",
+     "title": null,
+     "skills": [
+      "Python",
+      "SQL",
+      "PySpark",
+      "Airflow",
+      "Kafka",
+      "BigQuery",
+      "Redshift"
+     ],
+     "text": "▽▽플랫폼 · 데이터 엔지니어 · 2021-04 ~ 재직 중 · 주요 업무: 주문·로그 데이터 파이프라인 개발과 운영, 데이터 웨어하우스 관리, 추천 모델 서빙 · 기술: Python, SQL, PySpark, Airflow, Kafka, BigQuery, Redshift"
+    },
+    {
+     "id": "c2",
+     "type": "career",
+     "title": null,
+     "skills": [
+      "Python",
+      "SQL",
+      "Pandas",
+      "Tableau"
+     ],
+     "text": "◎◎리서치 · 데이터 분석가 · 2019-01 ~ 2021-03 · 주요 업무: 마케팅 성과 분석 리포트, 대시보드 제작, A/B 테스트 분석 · 기술: Python, SQL, Pandas, Tableau"
+    },
+    {
+     "id": "p1",
+     "type": "project_summary",
+     "title": "주문 데이터 파이프라인 구축",
+     "skills": [
+      "PySpark",
+      "Airflow",
+      "AWS S3",
+      "Redshift"
+     ],
+     "text": "역할: 데이터 엔지니어 (팀 3명) · 기술: PySpark, Airflow, AWS S3, Redshift · 사례: 일 배치 파이프라인 처리 시간 단축, 증분 적재로 비용 절감"
+    },
+    {
+     "id": "p2",
+     "type": "project_summary",
+     "title": "실시간 이벤트 수집",
+     "skills": [
+      "Kafka",
+      "Flink",
+      "Python"
+     ],
+     "text": "역할: 데이터 엔지니어 · 기술: Kafka, Flink, Python · 사례: 앱 클릭 이벤트 실시간 수집"
+    },
+    {
+     "id": "p3",
+     "type": "project_summary",
+     "title": "추천 모델 서빙",
+     "skills": [
+      "FastAPI",
+      "Docker",
+      "Kubernetes",
+      "MLflow",
+      "scikit-learn"
+     ],
+     "text": "역할: 데이터 엔지니어 · 기술: FastAPI, Docker, Kubernetes, MLflow, scikit-learn · 사례: 추천 모델 API 서빙, 모델 재학습 자동화"
+    },
+    {
+     "id": "p4",
+     "type": "project_summary",
+     "title": "데이터 품질 관리",
+     "skills": [
+      "Great Expectations",
+      "Airflow"
+     ],
+     "text": "역할: 데이터 엔지니어 · 기술: Great Expectations, Airflow · 사례: 파이프라인 데이터 검증 도입"
+    },
+    {
+     "id": "p5",
+     "type": "project_summary",
+     "title": "데이터 웨어하우스 이전",
+     "skills": [
+      "BigQuery",
+      "dbt"
+     ],
+     "text": "역할: 데이터 엔지니어 · 기술: BigQuery, dbt · 사례: Redshift에서 BigQuery로 이전"
+    },
+    {
+     "id": "e1",
+     "type": "episode",
+     "title": "주문 데이터 파이프라인 구축 · 일 배치 파이프라인 처리 시간 단축",
+     "skills": [
+      "PySpark",
+      "Airflow"
+     ],
+     "text": "역할: 데이터 엔지니어 (팀 3명) · 문제: 하루 주문 데이터 2억 건 처리 배치가 6시간 걸려 오전 리포트가 늦음 · 해결: Pandas 단일 서버 처리를 PySpark 분산 처리로 바꾸고 파티션 설계를 다시 함 · 결과: 배치 6시간 → 40분"
+    },
+    {
+     "id": "e2",
+     "type": "episode",
+     "title": "주문 데이터 파이프라인 구축 · 증분 적재로 비용 절감",
+     "skills": [
+      "AWS S3",
+      "Redshift"
+     ],
+     "text": "역할: 데이터 엔지니어 (팀 3명) · 문제: 매일 전체 테이블을 다시 적재해 클러스터 비용이 큼 · 해결: 변경분만 읽는 증분 적재와 S3 파티션 정리 · 결과: 클러스터 비용 월 45% 절감"
+    },
+    {
+     "id": "e3",
+     "type": "episode",
+     "title": "실시간 이벤트 수집 · 앱 클릭 이벤트 실시간 수집",
+     "skills": [
+      "Kafka",
+      "Flink"
+     ],
+     "text": "역할: 데이터 엔지니어 · 문제: 클릭 로그가 하루 뒤에야 분석 가능 · 해결: Kafka로 이벤트를 수집하고 스트림 처리로 5분 단위 집계 · 결과: 초당 이벤트 3만 건 수집, 지연 하루 → 5분"
+    },
+    {
+     "id": "e4",
+     "type": "episode",
+     "title": "추천 모델 서빙 · 추천 모델 API 서빙",
+     "skills": [
+      "FastAPI",
+      "Docker",
+      "Kubernetes"
+     ],
+     "text": "역할: 데이터 엔지니어 · 문제: 추천 결과를 매일 CSV로 넘겨 반영이 늦음 · 해결: FastAPI로 추천 API를 만들고 Docker 이미지로 Kubernetes에 배포 · 결과: p95 응답 80ms, 추천 클릭률 12% 증가"
+    },
+    {
+     "id": "e5",
+     "type": "episode",
+     "title": "추천 모델 서빙 · 모델 재학습 자동화",
+     "skills": [
+      "MLflow",
+      "Airflow",
+      "scikit-learn"
+     ],
+     "text": "역할: 데이터 엔지니어 · 문제: 모델 재학습을 분석가가 수동으로 실행 · 해결: Airflow로 주간 재학습을 예약하고 MLflow로 모델 버전 관리 · 결과: 재학습 수작업 0회"
+    },
+    {
+     "id": "e6",
+     "type": "episode",
+     "title": "데이터 품질 관리 · 파이프라인 데이터 검증 도입",
+     "skills": [
+      "Great Expectations",
+      "Airflow"
+     ],
+     "text": "역할: 데이터 엔지니어 · 문제: 원천 데이터 누락이 리포트 숫자 오류로 이어져 신뢰도 하락 · 해결: Great Expectations 검증을 Airflow 태스크로 넣고 실패 시 알림 · 결과: 데이터 오류 리포트 월 6건 → 0건"
+    },
+    {
+     "id": "e7",
+     "type": "episode",
+     "title": "데이터 웨어하우스 이전 · Redshift에서 BigQuery로 이전",
+     "skills": [
+      "BigQuery",
+      "dbt"
+     ],
+     "text": "역할: 데이터 엔지니어 · 문제: Redshift 클러스터 운영 부담과 쿼리 대기 · 해결: dbt 모델로 변환 로직을 옮기고 BigQuery로 단계적 이전 · 결과: 분석 쿼리 대기 시간 70% 감소"
+    }
+   ],
+   "queries": [
+    {
+     "text": "Python 기반 데이터 파이프라인 개발 경험",
+     "skills": [
+      "Python"
+     ],
+     "relevant": [
+      "e1",
+      "c1",
+      "sk:Python",
+      "p1"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "Spark 등 분산 처리 프레임워크 사용 경험",
+     "skills": [
+      "PySpark"
+     ],
+     "relevant": [
+      "e1",
+      "sk:PySpark",
+      "p1"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "Airflow 등 워크플로 관리 도구 운영 경험",
+     "skills": [
+      "Airflow"
+     ],
+     "relevant": [
+      "sk:Airflow",
+      "e5",
+      "e6",
+      "e1"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "대용량 데이터 처리 경험",
+     "skills": [],
+     "relevant": [
+      "e1",
+      "e3",
+      "p1"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "실시간 스트리밍 데이터 처리 경험",
+     "skills": [
+      "Kafka"
+     ],
+     "relevant": [
+      "e3",
+      "p2",
+      "sk:Kafka"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "DW 설계 및 운영 경험",
+     "skills": [
+      "BigQuery",
+      "Redshift"
+     ],
+     "relevant": [
+      "e7",
+      "e2",
+      "p5",
+      "sk:BigQuery",
+      "sk:Redshift"
+     ],
+     "expansions": [
+      "Data Warehouse",
+      "데이터 웨어하우스"
+     ]
+    },
+    {
+     "text": "ML 모델 서빙 또는 MLOps 경험",
+     "skills": [],
+     "relevant": [
+      "e4",
+      "e5",
+      "p3",
+      "sk:MLflow"
+     ],
+     "expansions": [
+      "Machine Learning Operations"
+     ]
+    },
+    {
+     "text": "데이터 품질 관리 경험",
+     "skills": [
+      "Great Expectations"
+     ],
+     "relevant": [
+      "e6",
+      "p4",
+      "sk:Great Expectations"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "비용 최적화 경험",
+     "skills": [],
+     "relevant": [
+      "e2"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "Scala 실무 개발 경험",
+     "skills": [
+      "Scala"
+     ],
+     "relevant": [
+      "sk:Scala"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "Hadoop 클러스터 운영 경험",
+     "skills": [
+      "Hadoop"
+     ],
+     "relevant": [],
+     "expansions": []
+    }
+   ]
+  },
+  {
+   "user": "u4 DevOps·SRE",
+   "docs": [
+    {
+     "id": "sk:AWS",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "AWS"
+     ],
+     "text": "AWS · infra · 능숙 · 사용처: ♤♤클라우드, EKS 기반 인프라 구축"
+    },
+    {
+     "id": "sk:Kubernetes",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Kubernetes"
+     ],
+     "text": "Kubernetes · infra · 능숙 · 사용처: ♤♤클라우드, EKS 기반 인프라 구축, GitOps 배포"
+    },
+    {
+     "id": "sk:Docker",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Docker"
+     ],
+     "text": "Docker · infra · 능숙 · 사용처: ♤♤클라우드"
+    },
+    {
+     "id": "sk:Terraform",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Terraform"
+     ],
+     "text": "Terraform · tool · 능숙 · 사용처: Terraform 도입, EKS 기반 인프라 구축"
+    },
+    {
+     "id": "sk:Ansible",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Ansible"
+     ],
+     "text": "Ansible · tool · 실무 사용 · 사용처: ♡♡호스팅"
+    },
+    {
+     "id": "sk:Helm",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Helm"
+     ],
+     "text": "Helm · tool · 실무 사용 · 사용처: EKS 기반 인프라 구축"
+    },
+    {
+     "id": "sk:Argo CD",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Argo CD"
+     ],
+     "text": "Argo CD · tool · 실무 사용 · 사용처: GitOps 배포"
+    },
+    {
+     "id": "sk:Jenkins",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Jenkins"
+     ],
+     "text": "Jenkins · tool · 실무 사용 · 사용처: ♡♡호스팅"
+    },
+    {
+     "id": "sk:GitHub Actions",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "GitHub Actions"
+     ],
+     "text": "GitHub Actions · tool · 실무 사용 · 사용처: GitOps 배포"
+    },
+    {
+     "id": "sk:Prometheus",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Prometheus"
+     ],
+     "text": "Prometheus · tool · 능숙 · 사용처: 모니터링 체계 개편"
+    },
+    {
+     "id": "sk:Grafana",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Grafana"
+     ],
+     "text": "Grafana · tool · 능숙 · 사용처: 모니터링 체계 개편"
+    },
+    {
+     "id": "sk:Loki",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Loki"
+     ],
+     "text": "Loki · tool · 실무 사용 · 사용처: 모니터링 체계 개편"
+    },
+    {
+     "id": "sk:Datadog",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Datadog"
+     ],
+     "text": "Datadog · tool · 학습 중"
+    },
+    {
+     "id": "sk:Linux",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Linux"
+     ],
+     "text": "Linux · infra · 능숙 · 사용처: ♡♡호스팅, ♤♤클라우드"
+    },
+    {
+     "id": "sk:Nginx",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Nginx"
+     ],
+     "text": "Nginx · infra · 실무 사용 · 사용처: ♡♡호스팅"
+    },
+    {
+     "id": "sk:Python",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Python"
+     ],
+     "text": "Python · language · 실무 사용 · 사용처: 장애 대응 체계 개선"
+    },
+    {
+     "id": "sk:Go",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Go"
+     ],
+     "text": "Go · language · 학습 중"
+    },
+    {
+     "id": "sk:Bash",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Bash"
+     ],
+     "text": "Bash · language · 능숙 · 사용처: ♡♡호스팅"
+    },
+    {
+     "id": "sk:Vault",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Vault"
+     ],
+     "text": "Vault · tool · 실무 사용 · 사용처: EKS 기반 인프라 구축"
+    },
+    {
+     "id": "sk:Istio",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Istio"
+     ],
+     "text": "Istio · infra · 학습 중"
+    },
+    {
+     "id": "sk:Karpenter",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "Karpenter"
+     ],
+     "text": "Karpenter · tool · 실무 사용 · 사용처: EKS 기반 인프라 구축"
+    },
+    {
+     "id": "sk:MySQL",
+     "type": "skill",
+     "title": null,
+     "skills": [
+      "MySQL"
+     ],
+     "text": "MySQL · database · 실무 사용 · 사용처: ♡♡호스팅"
+    },
+    {
+     "id": "c1",
+     "type": "career",
+     "title": null,
+     "skills": [
+      "AWS",
+      "Kubernetes",
+      "Terraform",
+      "Helm",
+      "Argo CD",
+      "Prometheus",
+      "Grafana"
+     ],
+     "text": "♤♤클라우드 · DevOps 엔지니어 · 2021-06 ~ 재직 중 · 주요 업무: AWS·EKS 인프라 설계와 운영, CI/CD, 모니터링·장애 대응 · 기술: AWS, Kubernetes, Terraform, Helm, Argo CD, Prometheus, Grafana"
+    },
+    {
+     "id": "c2",
+     "type": "career",
+     "title": null,
+     "skills": [
+      "Linux",
+      "Nginx",
+      "Bash",
+      "Ansible",
+      "Jenkins",
+      "MySQL"
+     ],
+     "text": "♡♡호스팅 · 시스템 엔지니어 · 2018-02 ~ 2021-05 · 주요 업무: 리눅스 서버 운영, 웹 서버 구성, 배포 스크립트 작성, 온콜 · 기술: Linux, Nginx, Bash, Ansible, Jenkins, MySQL"
+    },
+    {
+     "id": "p1",
+     "type": "project_summary",
+     "title": "EKS 기반 인프라 구축",
+     "skills": [
+      "AWS",
+      "Kubernetes",
+      "Helm",
+      "Karpenter",
+      "Vault",
+      "Terraform"
+     ],
+     "text": "역할: 인프라 리드 (팀 2명) · 기술: AWS, Kubernetes, Helm, Karpenter, Vault, Terraform · 사례: EC2 서비스를 EKS로 이전, 노드 자동 확장으로 비용 절감"
+    },
+    {
+     "id": "p2",
+     "type": "project_summary",
+     "title": "모니터링 체계 개편",
+     "skills": [
+      "Prometheus",
+      "Grafana",
+      "Loki"
+     ],
+     "text": "역할: DevOps 엔지니어 · 기술: Prometheus, Grafana, Loki · 사례: 메트릭·로그 통합 대시보드, 알림 노이즈 줄이기"
+    },
+    {
+     "id": "p3",
+     "type": "project_summary",
+     "title": "Terraform 도입",
+     "skills": [
+      "Terraform",
+      "AWS"
+     ],
+     "text": "역할: DevOps 엔지니어 · 기술: Terraform, AWS · 사례: 수동 콘솔 작업을 코드로 전환"
+    },
+    {
+     "id": "p4",
+     "type": "project_summary",
+     "title": "GitOps 배포",
+     "skills": [
+      "Argo CD",
+      "GitHub Actions",
+      "Helm"
+     ],
+     "text": "역할: DevOps 엔지니어 · 기술: Argo CD, GitHub Actions, Helm · 사례: GitOps 기반 배포 표준화"
+    },
+    {
+     "id": "p5",
+     "type": "project_summary",
+     "title": "장애 대응 체계 개선",
+     "skills": [
+      "Python",
+      "Grafana"
+     ],
+     "text": "역할: DevOps 엔지니어 · 기술: Python, Grafana · 사례: 장애 대응 런북과 사후 분석 도입"
+    },
+    {
+     "id": "e1",
+     "type": "episode",
+     "title": "EKS 기반 인프라 구축 · EC2 서비스를 EKS로 이전",
+     "skills": [
+      "Kubernetes",
+      "Helm",
+      "Terraform",
+      "AWS"
+     ],
+     "text": "역할: 인프라 리드 (팀 2명) · 문제: 서비스 20개가 EC2에 흩어져 배포·확장이 서비스마다 다름 · 해결: EKS 클러스터를 Terraform으로 만들고 Helm 차트로 서비스 20개를 단계적으로 이전 · 결과: 무중단 이전 완료, 배포 방식 1개로 통일"
+    },
+    {
+     "id": "e2",
+     "type": "episode",
+     "title": "EKS 기반 인프라 구축 · 노드 자동 확장으로 비용 절감",
+     "skills": [
+      "Karpenter",
+      "AWS",
+      "Kubernetes"
+     ],
+     "text": "역할: 인프라 리드 (팀 2명) · 문제: 피크 기준으로 노드를 띄워 놓아 야간 유휴 비용이 큼 · 해결: Karpenter로 노드 자동 확장, 스팟 인스턴스 혼합 · 결과: EC2 비용 월 38% 절감"
+    },
+    {
+     "id": "e3",
+     "type": "episode",
+     "title": "모니터링 체계 개편 · 메트릭·로그 통합 대시보드",
+     "skills": [
+      "Prometheus",
+      "Loki",
+      "Grafana"
+     ],
+     "text": "역할: DevOps 엔지니어 · 문제: 메트릭과 로그가 도구마다 흩어져 원인 파악이 늦음 · 해결: Prometheus·Loki·Grafana로 서비스별 대시보드와 로그 연결 · 결과: 장애 원인 파악 시간 평균 40분 → 10분"
+    },
+    {
+     "id": "e4",
+     "type": "episode",
+     "title": "모니터링 체계 개편 · 알림 노이즈 줄이기",
+     "skills": [
+      "Prometheus",
+      "Grafana"
+     ],
+     "text": "역할: DevOps 엔지니어 · 문제: 하루 알림 300건 중 대부분이 조치가 필요 없어 중요한 알림을 놓침 · 해결: SLO 기반 알림 규칙으로 다시 정의하고 중복 알림 묶기 · 결과: 알림 하루 300건 → 25건"
+    },
+    {
+     "id": "e5",
+     "type": "episode",
+     "title": "Terraform 도입 · 수동 콘솔 작업을 코드로 전환",
+     "skills": [
+      "Terraform",
+      "AWS"
+     ],
+     "text": "역할: DevOps 엔지니어 · 문제: AWS 리소스를 콘솔에서 손으로 만들어 환경마다 설정이 다름 · 해결: Terraform 모듈로 VPC·IAM·RDS를 코드화하고 PR 리뷰로 변경 · 결과: 환경 구성 시간 2일 → 2시간, 설정 차이 0건"
+    },
+    {
+     "id": "e6",
+     "type": "episode",
+     "title": "GitOps 배포 · GitOps 기반 배포 표준화",
+     "skills": [
+      "Argo CD",
+      "GitHub Actions",
+      "Helm"
+     ],
+     "text": "역할: DevOps 엔지니어 · 문제: 팀마다 배포 스크립트가 달라 롤백이 어려움 · 해결: GitHub Actions로 이미지 빌드, Argo CD로 Git 상태와 클러스터 동기화 · 결과: 배포 실패 시 롤백 1분 이내, 배포 횟수 주 10회 → 40회"
+    },
+    {
+     "id": "e7",
+     "type": "episode",
+     "title": "장애 대응 체계 개선 · 장애 대응 런북과 사후 분석 도입",
+     "skills": [
+      "Python",
+      "Grafana"
+     ],
+     "text": "역할: DevOps 엔지니어 · 문제: 같은 유형의 장애가 반복되고 대응이 담당자마다 다름 · 해결: 장애 유형별 런북 작성, Python 슬랙 봇으로 장애 채널 자동 생성, 사후 분석 회의 정례화 · 결과: 장애 평균 복구 시간 55분 → 20분"
+    }
+   ],
+   "queries": [
+    {
+     "text": "Kubernetes 운영 경험 2년 이상",
+     "skills": [
+      "Kubernetes"
+     ],
+     "relevant": [
+      "sk:Kubernetes",
+      "c1",
+      "e1",
+      "e2",
+      "p1"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "IaC 도구(Terraform 등) 사용 경험",
+     "skills": [
+      "Terraform"
+     ],
+     "relevant": [
+      "e5",
+      "sk:Terraform",
+      "p3",
+      "e1"
+     ],
+     "expansions": [
+      "Infrastructure as Code"
+     ]
+    },
+    {
+     "text": "AWS 클라우드 인프라 설계 및 운영 경험",
+     "skills": [
+      "AWS"
+     ],
+     "relevant": [
+      "c1",
+      "e1",
+      "e5",
+      "sk:AWS"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "CI/CD 구축 경험",
+     "skills": [
+      "GitHub Actions",
+      "Argo CD",
+      "Jenkins"
+     ],
+     "relevant": [
+      "e6",
+      "p4",
+      "sk:Argo CD",
+      "sk:GitHub Actions"
+     ],
+     "expansions": [
+      "Continuous Integration",
+      "Continuous Delivery"
+     ]
+    },
+    {
+     "text": "모니터링·관측 가능성 체계 구축 경험",
+     "skills": [
+      "Prometheus",
+      "Grafana"
+     ],
+     "relevant": [
+      "e3",
+      "e4",
+      "p2",
+      "sk:Prometheus",
+      "sk:Grafana"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "장애 대응 및 온콜 경험",
+     "skills": [],
+     "relevant": [
+      "e7",
+      "c2",
+      "e4"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "클라우드 비용 최적화 경험",
+     "skills": [],
+     "relevant": [
+      "e2"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "리눅스 시스템 운영 경험",
+     "skills": [
+      "Linux"
+     ],
+     "relevant": [
+      "sk:Linux",
+      "c2"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "스크립트 언어(Python, Bash)로 자동화한 경험",
+     "skills": [
+      "Python",
+      "Bash"
+     ],
+     "relevant": [
+      "e7",
+      "sk:Bash",
+      "sk:Python"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "서비스 메시(Istio) 운영 경험",
+     "skills": [
+      "Istio"
+     ],
+     "relevant": [
+      "sk:Istio"
+     ],
+     "expansions": []
+    },
+    {
+     "text": "Windows Server 운영 경험",
+     "skills": [],
+     "relevant": [],
+     "expansions": []
+    }
+   ]
+  }
+ ]
+}

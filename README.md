@@ -182,6 +182,7 @@ uv run --extra model python -m evals.embed_eval --compare-full    # 텍스트 �
 
 uv run python -m evals.extract_eval                               # P2 약어 확장어 확인 (real 모드 서버를 띄운 뒤)
 uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # P2 확장어로 검색 순위 비교
+uv run --extra model python -m evals.search_eval                 # 검색 후보 구성 비교 (D-12): BE 방식 / 종류별 상위 N / RRF
 
 uv run python -m evals.load_test                                  # 동시 요청 부하 테스트 (GPU 서버, compose 실행 후)
 ```
@@ -211,6 +212,7 @@ AI-nerdnam/
 ├── evals/                    평가·확인 도구
 │   ├── embed_eval.py         임베딩 검색 품질 (약어 확장어 비교 포함)
 │   ├── extract_eval.py       P2 약어 확장어 확인 (extract_cases.json)
+│   ├── search_eval.py        검색 후보 구성 비교 D-12 (search_cases.json, 사용자 4명)
 │   ├── load_test.py          부하 테스트
 │   ├── local_llm.py          Mac용 로컬 LLM 서버 (vLLM 대신)
 │   ├── smoke_restructure.py  /restructure 흐름 확인
