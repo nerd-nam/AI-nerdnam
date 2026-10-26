@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field
 from app import llm, state
 from app.config import LLM_MODEL
 from app.schemas import Clarification, Episode, Metric, RestructureRequest, RestructureResponse
-from app.validators import find_span, numbers, unsupported_numbers
+from app.validators import bad_metric_value, find_span, foreign_han, numbers, unsupported_numbers
 
 router = APIRouter()
 
-PROMPT_VERSION = "p1_v2"
+PROMPT_VERSION = "p1_v3"
 PROMPT = (Path(__file__).parent.parent / "prompts" / f"{PROMPT_VERSION}.md").read_text(encoding="utf-8")
 
 
@@ -23,7 +23,7 @@ PROMPT = (Path(__file__).parent.parent / "prompts" / f"{PROMPT_VERSION}.md").rea
 class DraftMetric(BaseModel):
     name: str
     before: str | None
-    after: str | None
+    after: str  # 개선 후 값이 없는 성과 항목은 만들지 못하게 (AI #24: 둘 다 null로 비움)
     source: Literal["raw_text", "answer"]
 
 
@@ -63,6 +63,10 @@ def _problems(out: P1Out, req: RestructureRequest, source: str) -> list[str]:
             problems.append(f"사례 {i}: 원문·답변에 없는 수치 {nums}")
         if bad := [q for q in d.quotes if find_span(q, req.source_text) is None]:
             problems.append(f"사례 {i}: quotes가 원문과 글자 그대로 같지 않음 {bad}")
+        if bad := [v for m in d.metrics for v in (m.before, m.after) if bad_metric_value(v)]:
+            problems.append(f'사례 {i}: metrics의 before·after는 원문 수치를 단위째 쓴 문자열이어야 함 (예: "3.2초") {bad}')
+        if han := foreign_han(_text(d), source):
+            problems.append(f"사례 {i}: 한국어로 쓸 것. 원문에 없는 글자 {''.join(han)}")
     return problems
 
 
@@ -73,12 +77,16 @@ def _episode(d: Draft, req: RestructureRequest, source: str) -> Episode:
         Clarification(field=_field_of(d, n), question=f"원문에 없는 수치 '{n}'가 들어 있어요. 맞는 값인지 확인해 주세요.")
         for n in unsupported_numbers(_text(d), source)
     ]
+    if han := foreign_han(_text(d), source):  # 다시 요청해도 남은 중국어 글자 → 사용자가 S05에서 직접 고치게
+        clar.append(Clarification(field=_field_of(d, han[0]), question=f"원문에 없는 글자 '{''.join(han)}'가 들어 있어요. 고쳐 주세요."))
     for i, c in enumerate(clar, 1):
         c.key = f"q{i}"  # 사례 안에서 겹치지 않게 AI가 붙인다
+    metrics = [_sourced(Metric(**m.model_dump()), req) for m in d.metrics  # 다시 요청해도 깨진 값은 표에 보이지 않게 뺀다 (수치는 result 본문에 남음)
+               if not (bad_metric_value(m.before) or bad_metric_value(m.after))]
     return Episode(
         title=d.title, role=d.role,
         skills=[s for s in d.skills if s.lower() in known or s.lower() in req.source_text.lower()],  # 없는 기술명 제거
-        problem=d.problem, solution=d.solution, result=d.result, metrics=[_sourced(Metric(**m.model_dump()), req) for m in d.metrics],
+        problem=d.problem, solution=d.solution, result=d.result, metrics=metrics,
         source_spans=spans, clarifications=clar,
     )
 

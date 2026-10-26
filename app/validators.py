@@ -16,6 +16,21 @@ def unsupported_numbers(text: str, source: str) -> list[str]:
     return sorted({n for n in _NUM.findall(text) if float(n.replace(",", "")) not in allowed})
 
 
+_NOT_VALUE = re.compile(r'[{}"]|raw_text|answer')
+_HAN = re.compile(r"[一-鿿]")
+
+
+def bad_metric_value(v: str | None) -> bool:
+    """성과 값은 "3.2초"처럼 수치가 든 짧은 문자열. 숫자가 없거나 JSON 조각·출처 이름이 섞이면 잘못 (AI #24)."""
+    return v is not None and (not _NUM.search(v) or bool(_NOT_VALUE.search(v)))
+
+
+def foreign_han(text: str, source: str) -> list[str]:
+    """text에 있지만 source에 없는 한자. 4B 모델이 "고可用性"처럼 중국어를 섞는다 (AI #24)."""
+    allowed = set(_HAN.findall(source))
+    return list(dict.fromkeys(ch for ch in _HAN.findall(text) if ch not in allowed))  # 나온 순서 그대로 (메시지에 '可用性'으로 보이게)
+
+
 def unknown_ids(ids: list[str], allowed: set[str]) -> list[str]:
     """입력에 없는 인용 청크 ID."""
     return [i for i in ids if i not in allowed]
