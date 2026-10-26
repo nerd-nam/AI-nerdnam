@@ -80,7 +80,7 @@ def score(rows: list[dict]) -> dict:
 
 def run(which: str, out: Path):
     cases, docs = json.loads(CASES.read_text(encoding="utf-8")), json.loads(DOCS.read_text(encoding="utf-8"))
-    rows, meta, total = [], None, 0.0
+    rows, meta, total = [], {}, 0.0  # 요청이 전부 실패해도 저장은 되게
     for u, du in zip(cases["users"], docs["users"]):
         by_id = {x["id"]: x for x in du["docs"]}
         num = {cid: n for n, cid in enumerate(by_id, 1)}  # 계약의 chunk_id는 정수
