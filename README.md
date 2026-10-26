@@ -182,7 +182,7 @@ uv run --extra model python -m evals.embed_eval --compare-full    # 텍스트 �
 
 uv run python -m evals.extract_eval                               # P2 약어 확장어 확인 (real 모드 서버를 띄운 뒤)
 uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # P2 확장어로 검색 순위 비교
-uv run --extra model python -m evals.search_eval                 # 검색 후보 구성 비교 (D-12): BE 방식 / 종류별 상위 N / RRF
+uv run --extra model python -m evals.search_eval                 # 검색 후보 구성 비교 (D-12): 지금 방식 / 종류별 상위 N / RRF
 
 uv run python -m evals.load_test                                  # 동시 요청 부하 테스트 (GPU 서버, compose 실행 후)
 ```

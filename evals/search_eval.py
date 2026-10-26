@@ -1,10 +1,10 @@
 """검색 후보 구성 비교 (D-12, AI-11). 요건마다 /match로 넘길 후보 20개를 세 방식으로 뽑아 정답 청크가 얼마나 들어가는지 잰다.
 
-- current: BE `ChunkSearch`와 같은 방식. 벡터 상위 20 ∪ 기술명이 겹치는 청크, 점수 = 0.7 × 코사인(벡터 상위 20 안일 때) + 0.3 × 겹침
+- current: 지금 방식(SPEC 작업목록 D-12). 벡터 상위 20 ∪ 기술명이 겹치는 청크, 점수 = 0.7 × 코사인(벡터 상위 20 안일 때) + 0.3 × 겹침
 - per_type: 같은 점수로 청크 종류별 상위 N(기술 5 · 경력 3 · 프로젝트 4 · 사례 8)을 뽑고, 모자라면 나머지에서 채움
 - rrf: 벡터 순위와 기술명 겹침 순위의 순위 합산(RRF, k=60)
 
-    python -m evals.search_eval                # 후보 20개 (BE 기본)
+    python -m evals.search_eval                # 후보 20개 (작업목록 AI-07 "후보 20 → 5")
     python -m evals.search_eval --limit 10     # 후보를 줄였을 때 차이가 더 잘 보인다
 """
 import argparse
@@ -25,7 +25,7 @@ VW, KW, RRF_K = 0.7, 0.3, 60
 
 def current(cos: np.ndarray, kw: np.ndarray, limit: int) -> list[int]:
     vec = set(np.argsort(-cos)[:limit].tolist())
-    # ponytail: BE SQL의 kw는 ORDER BY 없이 LIMIT이라 겹치는 청크가 limit보다 많으면 어느 것이 남을지 정해지지 않는다. 여기선 전부 넣는다
+    # 기술명이 겹치는 청크는 모두 후보 풀에 넣는다
     pool = vec | set(np.flatnonzero(kw > 0).tolist())
     score = {i: VW * cos[i] * (i in vec) + KW * (kw[i] > 0) for i in pool}
     return sorted(pool, key=lambda i: (-score[i], i))[:limit]

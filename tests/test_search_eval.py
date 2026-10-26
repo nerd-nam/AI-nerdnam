@@ -11,7 +11,7 @@ TYPES = ["skill"] * 4 + ["episode"] * 2
 
 
 def test_current_keyword_only_chunk_never_enters():
-    # 벡터 상위 limit 밖의 청크는 겹침 점수 0.3만 받아 0.7 × 코사인을 못 넘는다 (BE ChunkSearch와 같음)
+    # 벡터 상위 limit 밖의 청크는 겹침 점수 0.3만 받아 0.7 × 코사인을 못 넘는다 (D-12 지금 방식)
     assert current(COS, KW, 4) == [0, 1, 2, 3]
     assert 5 in current(COS, KW, 6)
 
