@@ -7,7 +7,7 @@ nerdnam(AI 맞춤형 지원서 코치)의 **AI 서버**입니다. 프로젝트 �
 - FastAPI, Python 3.12, 패키지 관리는 [uv](https://docs.astral.sh/uv/)를 씁니다.
 
 > 기획·계약·예시 데이터는 공용 문서 레포 `nerdnam-docs`(로컬 폴더 `SPEC-nerdnam`)에 있습니다.
-> 이 서버는 계약 `contracts/api-ai.openapi.yaml`의 태그 **`contracts-v0.2.1`** 을 따릅니다.
+> 이 서버는 계약 `contracts/api-ai.openapi.yaml`의 태그 **`contracts-v0.3.0`** 을 따릅니다.
 
 ## 목차
 
@@ -40,7 +40,7 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 | --- | --- | --- | --- |
 | `GET /health` | 모델이 준비됐는지 알려 줌 | — | — |
 | `POST /restructure` | 프로젝트 원문을 사례(에피소드) 목록으로 나눔. `mode`: `initial` 처음 나누기 / `split` 다시 나누기 / `episode` 사례 하나 고치기 | P1 | S05 |
-| `POST /requirements/extract` | 공고 요건 줄마다 기술명(`skills_raw`)과 최소 연차(`min_years`)를 뽑음 | P2 | S07 |
+| `POST /requirements/extract` | 공고 요건 줄마다 기술명(`skills_raw`), 약어 확장어(`expansions`, 예: MSA → 마이크로서비스 아키텍처), 최소 연차(`min_years`)를 뽑음 | P2 | S07 |
 | `POST /embed` | 텍스트를 768차원 벡터로 바꿈. `purpose`: `document` 청크 저장 / `query` 요건 검색 | — | — |
 | `POST /match` | 요건마다 경험 후보(최대 20개)를 보고 판정(`met`/`partial`/`unmet`)·근거(최대 5개)·이유를 줌 | P3 | S08 |
 | `POST /gap-guide` | 미충족·부분 충족 요건을 지원서에서 정직하게 다루는 가이드 | P6 | S08 |
@@ -110,7 +110,8 @@ curl localhost:8001/health
 ② GGUF (①이 안 될 때) — llama.cpp `llama-server`
 
 ```bash
-llama-server -hf bartowski/Qwen_Qwen3.5-4B-GGUF:bf16 --port 8001 --ctx-size 8192 --jinja --reasoning-budget 0
+llama-server -hf bartowski/Qwen_Qwen3.5-4B-GGUF:bf16 --no-mmproj --port 8001 --ctx-size 8192 --jinja --reasoning-budget 0
+# --no-mmproj: 이미지 입력용 부분은 올리지 않음 (텍스트만 씀, 메모리 절약)
 # 메모리가 부족하면 :bf16 대신 :Q8_0 (4.6GB)
 ```
 
@@ -128,6 +129,18 @@ curl localhost:8000/health       # llm·embedding이 모두 ready가 될 때까�
 uv run python evals/smoke_restructure.py ../SPEC-nerdnam/fixtures/projects.json   # 사례 나누기
 uv run python evals/smoke_report.py ../SPEC-nerdnam/fixtures                      # embed → match → gap-guide → guide
 ```
+
+**4단계 (선택): 요건 약어 확장어 확인 (AI-16)** — 28줄을 P2에 보내고, 나온 확장어로 검색 순위를 비교합니다.
+
+```bash
+uv run python -m evals.extract_eval                                           # 8줄 묶음 + 한 줄씩 → evals/out/extract.json
+# AI 서버를 끈 뒤 (임베딩 모델을 한 번 더 올리므로 16GB Mac은 메모리가 부족함)
+uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # 원문 / 사람 확장어 / P2 확장어 순위
+```
+
+- ① 원본 모델이면 `.env`의 `LLM_MODEL`을 그대로, ② GGUF면 `local/Qwen3.5-4B-gguf`로 둡니다. 결과 JSON의 `model` 값으로 어떤 모델로 쟀는지 구분합니다.
+- 포트 8000을 다른 프로그램이 쓰면 AI 서버를 다른 포트로 띄우고 `AI_URL=http://localhost:8010`처럼 알려 줍니다.
+- P2는 온도 0입니다. ①은 항상 같은 답을 고르므로(`do_sample=False`) 결과가 같습니다.
 
 **주의**
 
@@ -167,6 +180,9 @@ uv run pytest                                                     # 단위 테�
 uv run --extra model python -m evals.embed_eval                   # 임베딩 검색 품질 (Mac·Kaggle·GPU 어디서나)
 uv run --extra model python -m evals.embed_eval --compare-full    # 텍스트 인코더만 불러와도 결과가 같은지 확인
 
+uv run python -m evals.extract_eval                               # P2 약어 확장어 확인 (real 모드 서버를 띄운 뒤)
+uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # P2 확장어로 검색 순위 비교
+
 uv run python -m evals.load_test                                  # 동시 요청 부하 테스트 (GPU 서버, compose 실행 후)
 ```
 
@@ -193,7 +209,8 @@ AI-nerdnam/
 │   │   └── guide.py          /guide
 │   └── prompts/              프롬프트 (p1_v2.md = P1 버전 2)
 ├── evals/                    평가·확인 도구
-│   ├── embed_eval.py         임베딩 검색 품질
+│   ├── embed_eval.py         임베딩 검색 품질 (약어 확장어 비교 포함)
+│   ├── extract_eval.py       P2 약어 확장어 확인 (extract_cases.json)
 │   ├── load_test.py          부하 테스트
 │   ├── local_llm.py          Mac용 로컬 LLM 서버 (vLLM 대신)
 │   ├── smoke_restructure.py  /restructure 흐름 확인
@@ -208,6 +225,7 @@ AI-nerdnam/
 ### 프롬프트를 바꿀 때
 
 - 파일 이름이 버전입니다(`p3_v2.md`). 내용을 크게 바꾸면 새 버전 파일을 만듭니다. 이 버전이 응답의 `prompt_version`으로 나가 API 서버에 결과와 함께 저장됩니다.
+- P2는 LLM을 두 번(동시에) 부릅니다. 기술명 `p2_v2.md`와 약어 확장어 `p2_v2_abbr.md`가 한 버전(`p2_v2`)입니다. 둘 중 하나를 바꿔도 버전을 같이 올립니다.
 - 바꾼 뒤에는 평가 세트로 품질을 다시 확인합니다(작업목록 AI-11).
 
 ## 계약(API 모양)을 바꿀 때
@@ -232,7 +250,7 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | `VLLM_URL` | `http://localhost:8001` | LLM 서버 주소 |
 | `LLM_TIMEOUT` | `60` | LLM 읽기 제한(초). 로컬 Mac은 600 |
 | `LLM_MAX_MODEL_LEN` | `8192` | 입력+출력 토큰 한도. vLLM `--max-model-len`과 같게 |
-| `LLM_TEMPERATURE` | `0.7` | 생성 온도 |
+| `LLM_TEMPERATURE` | `0.7` | 생성 온도. P2(`/requirements/extract`)는 추출이라 이 값과 상관없이 0 |
 | `LLM_PRESENCE_PENALTY` | `1.5` | 반복 억제 |
 | `EMBED_REPO` | `google/embeddinggemma-2` | 임베딩 모델 (바꾸지 않음) |
 | `EMBED_REVISION` | `914f7f8…` | 임베딩 모델 버전 (고정, 바꾸지 않음) |
@@ -247,7 +265,7 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | --- | --- |
 | `기획서.md` 5.5 | API↔AI 엔드포인트, 공통 규칙(오류·타임아웃·stub) |
 | `기획서.md` 5.6 | 프롬프트 설계 |
-| `작업목록.md` AI-01~15 | AI 담당 작업 목록 |
+| `작업목록.md` AI-01~16 | AI 담당 작업 목록 |
 | `contracts/api-ai.openapi.yaml` | API↔AI 계약 |
 | `fixtures/` | 세 레포가 같이 쓰는 예시 데이터 (평가·smoke 스크립트 입력) |
 | `adr/0001-gpu-model-serving.md` | 모델·GPU 선택, 임베딩 고정 규칙, 시작 순서 |

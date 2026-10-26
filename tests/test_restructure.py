@@ -29,7 +29,7 @@ def llm_replies(monkeypatch):
     calls = []
 
     def set_replies(*replies):
-        async def chat(messages, schema=None, max_tokens=0):
+        async def chat(messages, schema=None, max_tokens=0, temperature=None):
             calls.append(messages)
             return replies[len(calls) - 1]
         monkeypatch.setattr(llm, "chat", chat)

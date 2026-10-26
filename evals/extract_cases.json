@@ -1,0 +1,35 @@
+{
+  "_note": "P2 약어 확장어 확인 세트 (AI-16). allowed는 맞다고 볼 확장어(공백·대소문자 무시하고 같으면 맞음), 빈 목록이면 확장어가 없어야 맞음. need가 true면 하나 이상 있어야 함. skills는 기대하는 skills_raw(빠짐·추가를 센다. iOS처럼 애매한 이름은 넣지 않아 추가로만 보임). 앞 14줄은 embed_cases.json 질의와 같은 문구다(embed_eval --p2가 문구로 찾음). 프롬프트 예시 약어(IaC·SRE·LLM·i18n·SM)는 쓰지 않는다. 프롬프트 예시로 맞힌 것인지 구분하기 위해서다.",
+  "lines": [
+    {"group": "embed", "text": "Kafka 등 메시지 큐 기반 비동기 처리 경험", "allowed": [], "need": false, "skills": ["Kafka"]},
+    {"group": "embed", "text": "대용량 트래픽 처리 경험", "allowed": [], "need": false, "skills": []},
+    {"group": "embed", "text": "RDBMS 설계 및 쿼리 튜닝 경험", "allowed": ["관계형 데이터베이스", "관계형 데이터베이스 관리 시스템", "Relational Database Management System", "관계형 DB"], "need": true, "skills": ["RDBMS"]},
+    {"group": "embed", "text": "장애 대응 및 운영 프로세스 개선 경험", "allowed": [], "need": false, "skills": []},
+    {"group": "embed", "text": "MSA 환경에서의 서버 개발 경험", "allowed": ["마이크로서비스 아키텍처", "Microservice Architecture", "Microservices Architecture", "마이크로서비스"], "need": true, "skills": []},
+    {"group": "embed", "text": "k8s 기반 컨테이너 운영 경험", "allowed": ["Kubernetes", "쿠버네티스"], "need": true, "skills": ["k8s"]},
+    {"group": "embed", "text": "CI/CD 파이프라인 구축 경험", "allowed": ["지속적 통합", "지속적 배포", "지속적 전달", "지속적 통합/지속적 배포", "Continuous Integration / Continuous Deployment", "Continuous Integration/Continuous Delivery", "연속 통합", "연속 배포", "연속 통합 / 연속 배포", "Continuous Integration", "Continuous Delivery", "Continuous Deployment"], "need": true, "skills": []},
+    {"group": "embed", "text": "Java/Spring 기반 백엔드 개발 3년 이상", "allowed": [], "need": false, "skills": ["Java", "Spring"]},
+    {"group": "embed", "text": "캐시 설계 경험 (Redis 등)", "allowed": [], "need": false, "skills": ["Redis"]},
+    {"group": "embed", "text": "결제 또는 정산 도메인 경험", "allowed": [], "need": false, "skills": []},
+    {"group": "embed", "text": "모바일 앱 개발 경험", "allowed": [], "need": false, "skills": []},
+    {"group": "embed", "text": "iOS 네이티브 앱 개발 경험 (Swift)", "allowed": [], "need": false, "skills": ["Swift"]},
+    {"group": "embed", "text": "머신러닝 모델 서빙 경험", "allowed": [], "need": false, "skills": []},
+    {"group": "embed", "text": "TDD 및 테스트 코드 작성 문화 경험", "allowed": ["테스트 주도 개발", "테스트 기반 개발", "Test-Driven Development", "Test Driven Development"], "need": true, "skills": []},
+
+    {"group": "약어", "text": "DDD 기반 도메인 모델링 경험", "allowed": ["도메인 주도 설계", "Domain-Driven Design", "Domain Driven Design"], "need": true, "skills": []},
+    {"group": "약어", "text": "OOP 원칙에 대한 깊은 이해", "allowed": ["객체 지향 프로그래밍", "객체지향 프로그래밍", "Object-Oriented Programming", "Object Oriented Programming"], "need": true, "skills": []},
+    {"group": "약어", "text": "ML 파이프라인 구축 및 운영 경험", "allowed": ["머신러닝", "머신 러닝", "기계 학습", "Machine Learning"], "need": true, "skills": []},
+    {"group": "약어", "text": "BI 대시보드 구축 경험", "allowed": ["비즈니스 인텔리전스", "Business Intelligence"], "need": true, "skills": []},
+    {"group": "약어", "text": "RDBMS(관계형 데이터베이스) 설계 경험", "allowed": ["관계형 데이터베이스 관리 시스템", "Relational Database Management System"], "need": false, "skills": ["RDBMS"]},
+    {"group": "약어", "text": "AWS 등 클라우드 환경 운영 경험", "allowed": ["Amazon Web Services", "아마존 웹 서비스"], "need": false, "skills": ["AWS"]},
+
+    {"group": "여러 뜻", "text": "PM으로서 개발 일정 수립과 이해관계자 조율 경험", "allowed": ["프로젝트 매니저", "프로젝트 관리자", "프로젝트 관리", "Project Manager"], "need": false, "skills": []},
+    {"group": "여러 뜻", "text": "PM 또는 PO로 제품 로드맵을 수립한 경험", "allowed": ["프로덕트 매니저", "제품 관리자", "Product Manager", "프로덕트 오너", "제품 책임자", "Product Owner"], "need": false, "skills": []},
+    {"group": "여러 뜻", "text": "PM 협업 경험", "allowed": [], "need": false, "skills": []},
+    {"group": "여러 뜻", "text": "CS 전공 또는 이에 준하는 지식", "allowed": ["컴퓨터 과학", "컴퓨터공학", "컴퓨터 공학", "Computer Science"], "need": false, "skills": []},
+    {"group": "여러 뜻", "text": "고객 CS 대응 프로세스 개선 경험", "allowed": ["고객 서비스", "고객 지원", "Customer Service", "Customer Support"], "need": false, "skills": []},
+    {"group": "여러 뜻", "text": "QA 자동화 테스트 경험", "allowed": ["품질 보증", "Quality Assurance", "품질 관리"], "need": false, "skills": []},
+    {"group": "여러 뜻", "text": "SA 경험 우대", "allowed": [], "need": false, "skills": []},
+    {"group": "여러 뜻", "text": "SE 역할 수행 경험", "allowed": [], "need": false, "skills": []}
+  ]
+}
