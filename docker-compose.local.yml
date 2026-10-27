@@ -1,0 +1,21 @@
+# 로컬 연동 테스트용 (GPU 없음, Mac·Windows·Linux): AI 서버를 가짜 응답(stub) 모드로 띄운다
+#   docker compose -f docker-compose.local.yml up -d --build
+# 모델 의존성 없이 빌드해 가볍다. 실제 모델은 Docker에서 Mac GPU를 쓸 수 없어 README "A. 로컬 Mac"으로 띄운다.
+# GPU 서버는 docker-compose.yml
+
+services:
+  ai:
+    build:
+      context: .
+      args:
+        EXTRAS: ""
+    image: nerdnam-ai:local
+    environment:
+      AI_MODE: stub
+    ports:
+      - "${AI_BIND:-127.0.0.1}:${AI_PORT:-8000}:8000"   # Linux에서 BE 컨테이너가 붙으려면 AI_BIND=0.0.0.0
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      retries: 3
+    restart: unless-stopped
