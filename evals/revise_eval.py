@@ -1,20 +1,16 @@
 """사례 수정 요청 반영 확인 (AI #25). revise_cases.json의 피드백마다 /restructure(mode=episode)를 부르고
 본문이 바뀌었는지, 원문에 없는 수치가 생겼는지, LLM을 몇 번 불렀는지 본다.
 
-    uv run python -m evals.revise_eval            # 로컬 LLM 서버(:8001, VLLM_URL)에 바로 붙는다
+    uv run --env-file .env python -m evals.revise_eval     # Bedrock 직접 (AWS_BEARER_TOKEN_BEDROCK)
 
-AI 서버를 띄우지 않고 라우터 함수를 같은 프로세스에서 부른다(임베딩 모델을 올리지 않아 16GB Mac에서도 돈다).
+AI 서버를 띄우지 않고 라우터 함수를 같은 프로세스에서 부른다.
 판정: ok / 그대로(change인데 피드백이 가리키는 fields가 하나도 안 바뀜) / 수치(원문에 없는 수치) / 502(서버가 반영 못 함으로 실패).
 """
 import asyncio
 import json
-import os
 import sys
 import time
 from pathlib import Path
-
-os.environ.setdefault("LLM_TIMEOUT", "600")  # 로컬은 느리다
-os.environ.setdefault("LLM_MODEL", "local/Qwen3.5-4B-gguf")
 
 from fastapi import HTTPException  # noqa: E402
 

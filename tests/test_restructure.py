@@ -139,7 +139,7 @@ def test_llm_schema_requires_all_fields():
 
 
 def test_sampling_sent(monkeypatch):
-    # 서버 기본값(llama-server 0.8, vLLM 1.0)에 맡기지 않고 직접 보낸다
+    # temperature는 직접 보낸다. Bedrock OpenAI 호환 API가 모르는 vLLM 전용 값(top_k 등)은 보내지 않는다
     import asyncio
     sent = {}
 
@@ -152,7 +152,9 @@ def test_sampling_sent(monkeypatch):
         return R()
     monkeypatch.setattr(llm.client, "post", post)
     asyncio.run(llm.chat([{"role": "user", "content": "ping"}]))
-    assert sent["temperature"] == 0.7 and sent["top_k"] == 20 and sent["presence_penalty"] == 1.5
+    assert sent["temperature"] == 0.7 and sent["model"] == "deepseek.v3-v1:0"
+    assert not {"top_k", "min_p", "presence_penalty", "chat_template_kwargs"} & sent.keys()
+    assert llm.client.headers["Authorization"].startswith("Bearer ")
 
 
 # AI #25: 수정 요청(피드백)에 지금 사례 본문을 그대로 돌려주면 성공으로 넘기지 않는다

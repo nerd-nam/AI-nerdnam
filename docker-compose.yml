@@ -1,63 +1,13 @@
-# GPU 서버 실행 설정 (ADR-0001). 기본값은 T4(g4dn.xlarge) 기준. L4(g6)는 README 참고
-#   docker compose up -d
-# 순서: vllm 이 healthy(모델 로딩·CUDA 그래프 준비 끝)가 된 뒤 ai 시작.
-#   vLLM은 시작할 때 GPU 메모리의 gpu-memory-utilization 만큼을 먼저 잡으므로, 임베딩이 먼저 올라가 있으면 시작에 실패한다.
-
-x-gpu: &gpu
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: 1
-            capabilities: [gpu]
-
+# AI 서버 실행 (ADR-0007). LLM·임베딩은 AWS Bedrock 호출이라 GPU가 필요 없다
+#   AWS_BEARER_TOKEN_BEDROCK=... docker compose up -d
 services:
-  vllm:
-    <<: *gpu
-    image: vllm/vllm-openai:v0.32.0          # Kaggle에서 확인한 버전
-    entrypoint: ["vllm", "serve"]
-    command:
-      - ${LLM_MODEL:-Qwen/Qwen3.5-4B}
-      - --language-model-only                # 이미지 인코더를 올리지 않음
-      - --dtype=${LLM_DTYPE:-half}           # T4: half (BF16 미지원) / L4: auto
-      - --max-model-len=8192
-      - --gpu-memory-utilization=0.80        # 남는 VRAM이 임베딩 몫
-      - --max-num-seqs=16                    # 기본값 256이면 T4에서 CUDA 그래프 준비 중 OOM
-      - --max-cudagraph-capture-size=16
-      - --port=8000
-    environment:
-      HF_TOKEN: ${HF_TOKEN:-}
-    volumes:
-      - hf-cache:/root/.cache/huggingface    # 모델을 한 번만 받음 (인스턴스를 꺼도 EBS에 남음)
-    ipc: host
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 10s
-      start_period: 15m                      # 첫 실행은 모델 다운로드 + 컴파일
-      retries: 3
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8001:8000"                # 서버 자신에서만 접근 (부하 테스트용). 외부에는 열지 않음
-
   ai:
-    <<: *gpu
     build: .
-    depends_on:
-      vllm:
-        condition: service_healthy
     environment:
       AI_MODE: real
-      LLM_MODEL: ${LLM_MODEL:-Qwen/Qwen3.5-4B}
-      VLLM_URL: http://vllm:8000
-      EMBED_DTYPE: ${EMBED_DTYPE:-float32}   # T4: float32 / L4: bfloat16
-      EMBED_REVISION: ${EMBED_REVISION:-914f7f89142e33e77833254d9c9b90c3cef7303b}  # 고정 (ADR-0001)
-      HF_TOKEN: ${HF_TOKEN:-}
-    volumes:
-      - hf-cache:/root/.cache/huggingface
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:?Bedrock API 키 필요}
+      LLM_MODEL: ${LLM_MODEL:-deepseek.v3-v1:0}
     ports:
       - "8000:8000"                          # BE만 접근: 보안 그룹에서 API 서버 IP만 허용
     restart: unless-stopped
-
-volumes:
-  hf-cache:
