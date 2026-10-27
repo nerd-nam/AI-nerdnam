@@ -73,10 +73,29 @@ def _problems(o: P3Out, reqs: list[MatchRequirement]) -> list[str]:
     return problems
 
 
+# ADR-0006 B10: 기술 목록에 학습 중뿐이면 partial. 모델(Nova 2 Lite)이 자주 unmet으로 내려(평가 70줄 중 묶음 8줄, 요건별 5줄)
+# 판정 뒤 코드로 올린다. 기술 청크 글은 "기술명 · 카테고리 · 숙련도 · 사용처"(기획서 4.4). 숙련도는 이름 또는 기준 문장
+_LEARNING = ("학습 중", "공부했거나 개인 프로젝트에서 써 봤")
+
+
+def _learning_skill(r: MatchRequirement):
+    """요건의 기술이 후보 기술 목록에 학습 중으로 있으면 (청크, 기술명)"""
+    skills = {s.lower() for s in r.skills}
+    for c in r.candidates:
+        if c.chunk_type == "skill" and any(m in c.text for m in _LEARNING):
+            name = c.text.split("·")[0].strip()
+            if name.lower() in skills or re.search(rf"(?<![a-z0-9]){re.escape(name.lower())}(?![a-z0-9])", r.text.lower()):
+                return c, name
+    return None
+
+
 def _result(x: P3Item, r: MatchRequirement) -> MatchResult:
     allowed = {c.chunk_id for c in r.candidates}
     ids = list(dict.fromkeys(i for i in x.evidence_chunk_ids if i in allowed))[:MAX_EVIDENCE]  # 그 요건 후보 안, 중복 없이, 5개까지
     verdict = x.verdict if ids else "unmet"  # 근거 없는 충족·부분 충족은 미충족 (BE도 같은 규칙)
+    if verdict == "unmet" and (hit := _learning_skill(r)):
+        return MatchResult(id=r.id, verdict="partial", evidence_chunk_ids=[hit[0].chunk_id],
+                           reason=f"기술 목록에 {hit[1]}(학습 중)만 있고, 실무에서 쓴 경험은 보이지 않아요.")
     return MatchResult(id=r.id, verdict=verdict, evidence_chunk_ids=ids if verdict != "unmet" else [], reason=clean_reason(x.reason))
 
 

@@ -66,6 +66,23 @@ def test_match_retries_on_made_up_number(llm_replies):
     assert len(calls) == 2 and "75" in calls[1][0][-1]["content"]
 
 
+def test_match_learning_skill_is_partial(llm_replies):
+    # ADR-0006 B10: 기술 목록에 학습 중뿐이면 모델이 unmet이라 해도 partial. 이름이 다르거나 실무 숙련도면 그대로 unmet
+    go = {"chunk_id": 7, "chunk_type": "skill", "text": "Go · language · 학습 중"}
+    pg = {"chunk_id": 8, "chunk_type": "skill", "text": "PostgreSQL · database · 공부했거나 개인 프로젝트에서 써 봤다"}
+    rd = {"chunk_id": 9, "chunk_type": "skill", "text": "Redis · database · 실무 사용"}
+    llm_replies(lambda messages: {"results": [
+        {"id": i, "verdict": "unmet", "evidence_chunk_ids": [], "reason": "경험 없음"} for i in (1, 2, 3, 4)]})
+    req = {"requirements": [
+        {"id": 1, "type": "required", "text": "Go 언어로 운영 도구를 개발한 경험", "candidates": [go]},
+        {"id": 2, "type": "required", "text": "RDB 경험", "skills": ["PostgreSQL"], "candidates": [pg]},
+        {"id": 3, "type": "required", "text": "Google Cloud 경험", "candidates": [go]},  # Go ≠ Google
+        {"id": 4, "type": "required", "text": "Redis 운영", "candidates": [rd]},
+    ]}
+    got = {x["id"]: (x["verdict"], x["evidence_chunk_ids"]) for x in c.post("/match", json=req).json()["results"]}
+    assert got == {1: ("partial", [7]), 2: ("partial", [8]), 3: ("unmet", []), 4: ("unmet", [])}
+
+
 def test_match_batches_and_fills_missing(llm_replies):
     # 요건 15개 → 10개·5개 두 묶음. 묶음 응답에서 끝내 빠진 요건(15)은 혼자 다시 부른다
     def reply(messages):
