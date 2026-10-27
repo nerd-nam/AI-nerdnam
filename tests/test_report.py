@@ -79,8 +79,10 @@ def test_match_learning_skill_is_partial(llm_replies):
         {"id": 3, "type": "required", "text": "Google Cloud 경험", "candidates": [go]},  # Go ≠ Google
         {"id": 4, "type": "required", "text": "Redis 운영", "candidates": [rd]},
     ]}
-    got = {x["id"]: (x["verdict"], x["evidence_chunk_ids"]) for x in c.post("/match", json=req).json()["results"]}
+    r = c.post("/match", json=req).json()["results"]
+    got = {x["id"]: (x["verdict"], x["evidence_chunk_ids"]) for x in r}
     assert got == {1: ("partial", [7]), 2: ("partial", [8]), 3: ("unmet", []), 4: ("unmet", [])}
+    assert "보완" in r[0]["reason"]
 
 
 def test_match_batches_and_fills_missing(llm_replies):

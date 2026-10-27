@@ -95,7 +95,7 @@ def _result(x: P3Item, r: MatchRequirement) -> MatchResult:
     verdict = x.verdict if ids else "unmet"  # 근거 없는 충족·부분 충족은 미충족 (BE도 같은 규칙)
     if verdict == "unmet" and (hit := _learning_skill(r)):
         return MatchResult(id=r.id, verdict="partial", evidence_chunk_ids=[hit[0].chunk_id],
-                           reason=f"기술 목록에 {hit[1]}(학습 중)만 있고, 실무에서 쓴 경험은 보이지 않아요.")
+                           reason=f"기술 목록에 {hit[1]}(학습 중)만 있고 실무에서 쓴 경험은 보이지 않아요. 경험이나 프로젝트로 보완해야 해요.")
     return MatchResult(id=r.id, verdict=verdict, evidence_chunk_ids=ids if verdict != "unmet" else [], reason=clean_reason(x.reason))
 
 
