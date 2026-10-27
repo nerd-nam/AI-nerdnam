@@ -182,6 +182,7 @@ uv run --extra model python -m evals.embed_eval                   # 임베딩 �
 uv run --extra model python -m evals.embed_eval --compare-full    # 텍스트 인코더만 불러와도 결과가 같은지 확인
 
 uv run python -m evals.extract_eval                               # P2 약어 확장어 확인 (real 모드 서버를 띄운 뒤)
+uv run python -m evals.revise_eval                                # 사례 수정 요청 반영 확인 (AI #25, LLM 서버 :8001만 있으면 됨)
 uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # P2 확장어로 검색 순위 비교
 uv run --extra model python -m evals.search_eval                 # 검색 후보 구성 비교 (D-12): 지금 방식 / 종류별 상위 N / RRF
 uv run python -m evals.match_eval                                # 요건 판정 평가 (ADR-0006, real 모드 서버를 띄운 뒤)
@@ -218,6 +219,7 @@ AI-nerdnam/
 │   ├── match_eval.py         요건 판정 평가 ADR-0006 (match_cases.json, 요건 70줄)
 │   ├── load_test.py          부하 테스트
 │   ├── local_llm.py          Mac용 로컬 LLM 서버 (vLLM 대신)
+│   ├── revise_eval.py        사례 수정 요청 반영 확인 (revise_cases.json)
 │   ├── smoke_restructure.py  /restructure 흐름 확인
 │   └── smoke_report.py       리포트 흐름 확인
 ├── tests/                    pytest
