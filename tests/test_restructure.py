@@ -76,12 +76,12 @@ def test_503_while_loading(monkeypatch):
 
 
 def test_llm_read_timeout_is_504(monkeypatch):
-    # 읽기 시간 초과를 503(GPU 꺼짐)으로 보내면 BE가 재시도해 GPU 부하가 두 배가 된다 (기획서 5.5)
-    import httpx
+    # 읽기 시간 초과를 503으로 보내면 BE가 재시도해 비용·부하가 두 배가 된다 (기획서 5.5)
+    from botocore.exceptions import ReadTimeoutError
     monkeypatch.setitem(state.models, "llm", "ready")
 
     async def chat(*a, **k):
-        raise httpx.ReadTimeout("slow")
+        raise ReadTimeoutError(endpoint_url="https://bedrock")
     monkeypatch.setattr(llm, "chat", chat)
     assert c.post("/restructure", json={"mode": "initial", "source_text": RAW}).status_code == 504
 
@@ -138,21 +138,26 @@ def test_llm_schema_requires_all_fields():
     assert set(defs["DraftQuestion"]["required"]) == {"field", "question", "example"}
 
 
-def test_sampling_sent(monkeypatch):
-    # 서버 기본값(llama-server 0.8, vLLM 1.0)에 맡기지 않고 직접 보낸다
+def test_converse_request(monkeypatch):
+    # Converse 요청 모양: system 분리, 이어진 user는 한 메시지로 합침, temperature·topP 직접 지정, 스키마는 강제 도구 호출
     import asyncio
     sent = {}
 
-    class R:
-        def raise_for_status(self): pass
-        def json(self): return {"choices": [{"message": {"content": "ok"}}]}
-
-    async def post(url, json):
-        sent.update(json)
-        return R()
-    monkeypatch.setattr(llm.client, "post", post)
-    asyncio.run(llm.chat([{"role": "user", "content": "ping"}]))
-    assert sent["temperature"] == 0.7 and sent["top_k"] == 20 and sent["presence_penalty"] == 1.5
+    def converse(**req):
+        sent.update(req)
+        out = [{"toolUse": {"name": "out", "input": {"a": "가"}}}] if "toolConfig" in req else [{"reasoningContent": {}}, {"text": "ok"}]
+        return {"output": {"message": {"content": out}}}
+    monkeypatch.setattr(llm.client, "converse", converse)
+    msgs = [{"role": "system", "content": "S"}, {"role": "user", "content": "A"}, {"role": "user", "content": "B"}]
+    assert json.loads(asyncio.run(llm.chat(msgs, schema={"type": "object"}, max_tokens=8))) == {"a": "가"}  # 도구 입력이 출력
+    assert sent["modelId"] == "global.amazon.nova-2-lite-v1:0" and sent["system"] == [{"text": "S"}]
+    assert sent["messages"] == [{"role": "user", "content": [{"text": "A"}, {"text": "B"}]}]
+    assert sent["inferenceConfig"] == {"maxTokens": 8, "temperature": 0.7, "topP": 0.8}
+    tc = sent["toolConfig"]
+    assert tc["toolChoice"] == {"tool": {"name": "out"}} and tc["tools"][0]["toolSpec"]["inputSchema"] == {"json": {"type": "object"}}
+    sent.clear()
+    assert asyncio.run(llm.chat([{"role": "user", "content": "p"}], temperature=0)) == "ok"  # text 블록만
+    assert sent["inferenceConfig"]["temperature"] == 0 and "system" not in sent and "toolConfig" not in sent
 
 
 # AI #25: 수정 요청(피드백)에 지금 사례 본문을 그대로 돌려주면 성공으로 넘기지 않는다

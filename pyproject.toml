@@ -6,19 +6,12 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
+    "boto3>=1.43.119",
 ]
 
 [project.optional-dependencies]
-# GPU 서버(AI_MODE=real)에서만 설치. stub 모드 개발에는 필요 없음
-model = [
-    "torch",
-    "sentence-transformers>=6.1",
-    "transformers>=5.20",  # embeddinggemma-2. vLLM(<5.20)과 충돌하므로 vLLM은 별도 컨테이너
-    # 텍스트만 써도 sentence-transformers가 이미지·동영상 처리기(CPU)를 만들어서 필요.
-    # GPU에는 텍스트 인코더만 올라간다 (app/embedding.py)
-    "pillow",
-    "torchvision",
-]
+# 평가 스크립트(evals/)만 씀. 서버는 필요 없음
+eval = ["numpy"]
 
 [dependency-groups]
 dev = ["pytest>=8"]

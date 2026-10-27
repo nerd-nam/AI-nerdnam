@@ -23,7 +23,7 @@ nerdnam(AI 맞춤형 지원서 코치)의 **AI 서버**입니다. 프로젝트 �
 
 ## 빠르게 시작하기
 
-GPU 없이 가짜 응답(stub)으로 바로 띄울 수 있습니다. BE 연동 개발은 이것으로 충분합니다.
+Bedrock 키 없이 가짜 응답(stub)으로 바로 띄울 수 있습니다. BE 연동 개발은 이것으로 충분합니다.
 
 ```bash
 uv sync                                              # 의존성 설치
@@ -41,7 +41,7 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 | `GET /health` | 모델이 준비됐는지 알려 줌 | — | — |
 | `POST /restructure` | 프로젝트 원문을 사례(에피소드) 목록으로 나눔. `mode`: `initial` 처음 나누기 / `split` 다시 나누기 / `episode` 사례 하나 고치기 | P1 | S05 |
 | `POST /requirements/extract` | 공고 요건 줄마다 기술명(`skills_raw`), 약어 확장어(`expansions`, 예: MSA → 마이크로서비스 아키텍처), 최소 연차(`min_years`)를 뽑음 | P2 | S07 |
-| `POST /embed` | 텍스트를 768차원 벡터로 바꿈. `purpose`: `document` 청크 저장 / `query` 요건 검색 | — | — |
+| `POST /embed` | 텍스트를 1024차원 벡터로 바꿈. `purpose`: `document` 청크 저장 / `query` 요건 검색 | — | — |
 | `POST /match` | 요건마다 경험 후보(최대 20개)를 보고 판정(`met`/`partial`/`unmet`)·근거(최대 5개)·이유를 줌 | P3 | S08 |
 | `POST /gap-guide` | 미충족·부분 충족 요건을 지원서에서 정직하게 다루는 가이드 | P6 | S08 |
 | `POST /guide` | 탭 하나의 작성 방향. 탭: `motive` `intro` `portfolio` `career`(P4), `image`(P5) | P4·P5 | S09 |
@@ -53,8 +53,8 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 
   | 상태 코드 | 뜻 | API 서버 처리 |
   | --- | --- | --- |
-  | 503 | 모델이 꺼졌거나 로딩 중 | `GPU_UNAVAILABLE`, 1회 재시도 |
-  | 502 | LLM 출력 형식이 두 번 연속 틀림 | `AI_ERROR`, 1회 재시도 |
+  | 503 | 연결 확인 중, Bedrock 호출 한도 초과·일시 장애·연결 실패 | `GPU_UNAVAILABLE`, 1회 재시도 |
+  | 502 | LLM 출력 형식이 두 번 연속 틀림, Bedrock이 요청을 거부(400·403 등) | `AI_ERROR`, 1회 재시도 |
   | 504 | LLM 생성 시간 초과 | `TIMEOUT`, 재시도 안 함 |
   | 422 | 요청 형식이 틀림 | `AI_ERROR`, 재시도 안 함 |
 
@@ -66,16 +66,16 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 
 | 모드 | 언제 쓰나 | 동작 |
 | --- | --- | --- |
-| `stub` (기본값) | 로컬 개발, BE 연동 개발 | GPU 없이 형식만 같은 가짜 응답을 돌려줌 |
-| `real` | GPU 서버, 로컬 Mac에서 실제 모델 확인 | 시작하면 모델을 로딩·예열함 |
+| `stub` (기본값) | 로컬 개발, BE 연동 개발 | Bedrock 호출 없이 형식만 같은 가짜 응답을 돌려줌 |
+| `real` | 운영, 로컬에서 실제 모델 확인 | AWS Bedrock을 호출함. 시작하면 연결 확인 |
 
 `real` 모드의 `/health` 응답 `models` 값은 아래와 같습니다. LLM과 임베딩은 따로 표시됩니다.
 
 | 값 | 뜻 |
 | --- | --- |
-| `loading` | 로딩·예열 중 (켠 직후 몇 분) |
+| `loading` | 연결 확인 중 (켠 직후 몇 초) |
 | `ready` | 사용 가능 |
-| `error` | 로딩 실패 (AI 서버를 다시 시작해야 함) |
+| `error` | 연결 확인 실패 (키·권한·리전 확인. 1분마다 다시 시도) |
 
 API 서버는 `embedding`이 `ready`일 때 "임베딩 대기" 청크를 다시 처리합니다. `llm`이 준비되지 않았는데 생성 요청이 오면 AI 서버가 503을 돌려줍니다.
 
@@ -83,125 +83,69 @@ API 서버는 `embedding`이 `ready`일 때 "임베딩 대기" 청크를 다시 
 
 | 모델 | 용도 | 어디서 돌아가나 |
 | --- | --- | --- |
-| `Qwen/Qwen3.5-4B` | LLM (P1~P6) | vLLM 컨테이너 (AI 서버와 따로) |
-| `google/embeddinggemma-2` (텍스트 인코더만, 768차원) | `/embed` | AI 서버 안 |
+| `global.amazon.nova-2-lite-v1:0` (Amazon Nova 2 Lite) | LLM (P1~P6) | AWS Bedrock 서울 리전, Global 교차 리전 추론 프로필 (boto3 Converse) |
+| `amazon.titan-embed-text-v2:0` (1024차원) | `/embed` | AWS Bedrock 서울 리전, bedrock-runtime(boto3 InvokeModel) |
 
-임베딩 모델의 버전(revision)과 차원은 **고정**되어 있습니다(`app/config.py`). 바꾸면 저장된 벡터를 전부 다시 계산해야 하므로 ADR-0001 합의 없이 바꾸지 마세요.
+- 임베딩은 서울 리전 안에서만 처리합니다(In-Region). LLM(Nova 2 Lite)은 서울에서 Global 교차 리전 프로필로만 제공돼 **요청이 국외에서 처리될 수 있습니다.**
+- 임베딩 모델과 차원은 **고정**입니다(`app/config.py`). 바꾸면 저장된 벡터를 전부 다시 계산해야 하므로 ADR 합의 없이 바꾸지 마세요.
+- LLM을 바꿀 때는 `LLM_MODEL`만 바꾸고 평가를 다시 돌립니다.
+- Bedrock은 새 JSON 스키마를 처음 받을 때 준비에 최대 90초가 걸리고 24시간 캐시합니다. 그래서 AI 서버가 시작할 때와 12시간마다 출력 스키마를 미리 한 번씩 보냅니다(`app/main.py`).
 
 ## 실제 모델로 실행하기
 
-### A. 로컬 Mac
-
-Mac에서는 vLLM을 쓸 수 없어서, vLLM 자리(포트 8001)에 로컬 LLM 서버를 띄웁니다. AI 서버 코드는 같습니다. Docker에서는 Mac GPU를 쓸 수 없으므로 AI 서버는 Docker 밖에서 실행합니다.
-
-**1단계: LLM 서버 띄우기 (둘 중 하나)**
-
-① 원본 모델 (먼저 시도) — GPU 서버와 같은 가중치입니다.
+Bedrock API 키가 필요합니다(Bedrock 콘솔 → API keys). 키는 `.env`에만 두고 커밋하거나 공유하지 않습니다.
 
 ```bash
-uv run --extra model python -m evals.local_llm     # :8001, 첫 실행은 모델 9.3GB 다운로드
-curl localhost:8001/health
-```
-
-- JSON 형식을 강제하지 못해 형식을 프롬프트로 알려 줍니다. 형식이 틀리면 AI 서버가 1회 다시 요청합니다.
-- 느립니다. `.env`의 `LLM_TIMEOUT`(600초)으로 끊기지 않게 해 둡니다.
-- 모델을 못 불러오거나 너무 느리면 ②를 쓰세요.
-
-② GGUF (①이 안 될 때) — llama.cpp `llama-server`
-
-```bash
-llama-server -hf bartowski/Qwen_Qwen3.5-4B-GGUF:bf16 --no-mmproj --port 8001 --ctx-size 8192 --parallel 1 --jinja --reasoning-budget 0
-# --no-mmproj: 이미지 입력용 부분은 올리지 않음 (텍스트만 씀, 메모리 절약)
-# --parallel 1: 기본은 슬롯 4개가 문맥 8192를 나눠 써서, /match처럼 동시에 여러 번 부르면 "Context size has been exceeded"로 502가 난다
-# 메모리가 부족하면 :bf16 대신 :Q8_0 (4.6GB)
-```
-
-**2단계: AI 서버 띄우기**
-
-```bash
-cp .env.local.example .env       # ②를 쓰면 .env의 LLM_MODEL을 local/Qwen3.5-4B-gguf 로 바꾸기
+cp .env.local.example .env       # AWS_BEARER_TOKEN_BEDROCK 채우기
 uv run --env-file .env uvicorn app.main:app --port 8000
 curl localhost:8000/health       # llm·embedding이 모두 ready가 될 때까지 기다리기
 ```
 
-**3단계 (선택): 흐름 확인** — SPEC의 예시 데이터로 BE 호출 순서를 흉내 냅니다.
+Docker로 띄울 때:
+
+```bash
+AWS_BEARER_TOKEN_BEDROCK=... docker compose up -d --build
+```
+
+흐름 확인(선택) — SPEC의 예시 데이터로 BE 호출 순서를 흉내 냅니다.
 
 ```bash
 uv run python evals/smoke_restructure.py ../SPEC-nerdnam/fixtures/projects.json   # 사례 나누기
 uv run python evals/smoke_report.py ../SPEC-nerdnam/fixtures                      # embed → match → gap-guide → guide
 ```
 
-**4단계 (선택): 요건 약어 확장어 확인 (AI-16)** — 28줄을 P2에 보내고, 나온 확장어로 검색 순위를 비교합니다.
+- BE가 Docker 안에 있으면 AI 서버 주소는 `http://host.docker.internal:8000`입니다.
+- 호출할 때마다 Bedrock 요금이 나갑니다(토큰 단위). 평가를 반복해서 돌릴 때 참고하세요.
 
-```bash
-uv run python -m evals.extract_eval                                           # 8줄 묶음 + 한 줄씩 → evals/out/extract.json
-# AI 서버를 끈 뒤 (임베딩 모델을 한 번 더 올리므로 16GB Mac은 메모리가 부족함)
-uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # 원문 / 사람 확장어 / P2 확장어 순위
-```
-
-- ① 원본 모델이면 `.env`의 `LLM_MODEL`을 그대로, ② GGUF면 `local/Qwen3.5-4B-gguf`로 둡니다. 결과 JSON의 `model` 값으로 어떤 모델로 쟀는지 구분합니다.
-- 포트 8000을 다른 프로그램이 쓰면 AI 서버를 다른 포트로 띄우고 `AI_URL=http://localhost:8010`처럼 알려 줍니다.
-- P2는 온도 0입니다. ①은 항상 같은 답을 고르므로(`do_sample=False`) 결과가 같습니다.
-
-**주의**
-
-- 메모리(16GB Mac 기준): LLM bf16 약 9GB + 임베딩 약 2GB. BE·DB Docker(약 8GB)까지 같이 띄우면 부족합니다. 그럴 땐 Docker 메모리를 줄이거나 GGUF `Q8_0`를 쓰세요.
-- 로컬은 **로직 확인용**입니다. 실행 방식·정밀도·JSON 강제 방식이 달라서 결과가 GPU 서버와 같지 않습니다. 품질·응답 시간·부하는 GPU 서버에서 잽니다.
-- `LLM_MODEL`을 실제 모델 이름과 다르게 두어, 로컬 결과가 GPU 서버 결과로 저장되지 않게 합니다(`.env.local.example`에 이미 그렇게 되어 있음).
-- BE가 Docker 안에 있으면 AI 서버 주소는 `http://host.docker.internal:8000`입니다. 로컬은 느리므로 BE의 AI 읽기 타임아웃도 늘려야 합니다.
-
-### B. GPU 서버 한 대 (docker compose)
-
-GPU 서버 한 대에서 시험할 때 씁니다. 운영 배포는 아래 C를 보세요.
-
-```bash
-docker compose up -d --build     # vllm이 healthy가 된 뒤 ai가 시작됨
-curl localhost:8000/health       # llm·embedding이 모두 ready가 될 때까지 기다리기
-```
-
-- 기본값은 T4(g4dn.xlarge)입니다. L4(g6)는 `LLM_DTYPE=auto EMBED_DTYPE=bfloat16 docker compose up -d`
-- 호스트에 NVIDIA 드라이버와 NVIDIA Container Toolkit이 필요합니다.
-- **시작 순서가 중요합니다.** vLLM이 GPU 메모리의 80%를 먼저 잡아야 해서, 임베딩(AI 서버)이 먼저 올라가면 vLLM이 시작에 실패합니다. compose가 이 순서를 지켜 줍니다.
-- 첫 실행은 모델 다운로드와 컴파일 때문에 최대 15분 걸립니다.
-- AI 서버(8000)는 보안 그룹에서 API 서버만 허용합니다. vLLM(8001)은 서버 자신에서만 접근할 수 있습니다.
-
-### C. 운영 (EKS)
-
-운영은 EKS 클러스터에서 합니다(ADR-0005). 배포 설정은 이 레포가 아니라 **`nerdnam-infra` 레포의 `apps/ai/`** 에 있고, 이 레포는 이미지를 ECR에 올리는 데까지 맡습니다.
-
-- vLLM과 AI 서버는 한 Pod 안의 두 컨테이너로 돌고, GPU 한 장을 나눠 씁니다.
-- 클러스터 안 주소: `http://ai.nerdnam.svc:8000` (라벨 `app: api`인 Pod만 접근 가능)
-- 켜기·끄기: `kubectl scale deploy/ai -n nerdnam --replicas=1` / `--replicas=0`
+운영은 EKS에서 GPU 없이 일반 Pod로 돌립니다. 배포 설정은 `nerdnam-infra` 레포의 `apps/ai/`에 있고, 키는 Secret으로 넣습니다.
 
 ## 테스트와 평가
 
 ```bash
-uv run pytest                                                     # 단위 테스트 (stub, GPU 불필요)
+uv run pytest                                                     # 단위 테스트 (stub, Bedrock 호출 없음)
 
-uv run --extra model python -m evals.embed_eval                   # 임베딩 검색 품질 (Mac·Kaggle·GPU 어디서나)
-uv run --extra model python -m evals.embed_eval --compare-full    # 텍스트 인코더만 불러와도 결과가 같은지 확인
+# 아래는 Bedrock을 실제로 호출합니다 (--env-file .env 로 키 전달)
+uv run --env-file .env --extra eval python -m evals.embed_eval    # 임베딩 검색 품질
+uv run --env-file .env --extra eval python -m evals.embed_eval --p2 evals/out/extract.json   # P2 확장어로 검색 순위 비교
+uv run --env-file .env --extra eval python -m evals.search_eval   # 검색 후보 구성 비교 (D-12): 지금 방식 / 종류별 상위 N / RRF
+uv run --env-file .env python -m evals.revise_eval                # 사례 수정 요청 반영 확인 (AI #25, 서버 없이)
 
 uv run python -m evals.extract_eval                               # P2 약어 확장어 확인 (real 모드 서버를 띄운 뒤)
-uv run python -m evals.revise_eval                                # 사례 수정 요청 반영 확인 (AI #25, LLM 서버 :8001만 있으면 됨)
-uv run --extra model python -m evals.embed_eval --p2 evals/out/extract.json   # P2 확장어로 검색 순위 비교
-uv run --extra model python -m evals.search_eval                 # 검색 후보 구성 비교 (D-12): 지금 방식 / 종류별 상위 N / RRF
-uv run python -m evals.match_eval                                # 요건 판정 평가 (ADR-0006, real 모드 서버를 띄운 뒤)
-
-uv run python -m evals.load_test                                  # 동시 요청 부하 테스트 (GPU 서버, compose 실행 후)
+uv run python -m evals.match_eval                                 # 요건 판정 평가 (ADR-0006, real 모드 서버를 띄운 뒤)
 ```
 
-`--extra model`은 torch·sentence-transformers 같은 무거운 패키지를 함께 설치합니다. stub 개발에는 필요 없습니다.
+`--extra eval`은 평가 스크립트가 쓰는 numpy를 설치합니다. 서버에는 필요 없습니다.
 
 ## 폴더 구조
 
 ```text
 AI-nerdnam/
 ├── app/                      서버 본체
-│   ├── main.py               앱 시작, 모델 로딩·예열, /health, 라우터 등록
+│   ├── main.py               앱 시작, 연결 확인, /health, 라우터 등록
 │   ├── config.py             환경변수 읽기
 │   ├── schemas.py            요청·응답 모델 = API↔AI 계약의 출처
-│   ├── llm.py                vLLM 호출 (thinking 끔, JSON 형식 강제)
-│   ├── embedding.py          임베딩 모델 로딩, 접두어 규칙 (서버와 evals가 같이 씀)
+│   ├── llm.py                Bedrock LLM 호출(boto3 Converse), JSON 형식 강제, 오류 → 상태 코드
+│   ├── embedding.py          Bedrock Titan 임베딩 호출(boto3) (서버와 evals가 같이 씀)
 │   ├── validators.py         LLM 출력 검증 (형식, 원문에 없는 수치, 인용 ID)
 │   ├── state.py              모델 상태 (loading/ready/error)
 │   ├── routers/              엔드포인트별 코드
@@ -217,15 +161,13 @@ AI-nerdnam/
 │   ├── extract_eval.py       P2 약어 확장어 확인 (extract_cases.json)
 │   ├── search_eval.py        검색 후보 구성 비교 D-12 (search_cases.json, 사용자 4명)
 │   ├── match_eval.py         요건 판정 평가 ADR-0006 (match_cases.json, 요건 70줄)
-│   ├── load_test.py          부하 테스트
-│   ├── local_llm.py          Mac용 로컬 LLM 서버 (vLLM 대신)
 │   ├── revise_eval.py        사례 수정 요청 반영 확인 (revise_cases.json)
 │   ├── smoke_restructure.py  /restructure 흐름 확인
 │   └── smoke_report.py       리포트 흐름 확인
 ├── tests/                    pytest
 ├── scripts/export_contract.py   schemas.py → SPEC 계약 파일 내보내기
-├── Dockerfile, docker-compose.yml   GPU 서버 한 대 실행 설정
-├── .env.local.example        로컬 Mac real 모드 설정 예시
+├── Dockerfile, docker-compose.yml   AI 서버 실행 설정
+├── .env.local.example        real 모드 설정 예시 (Bedrock 키)
 └── pyproject.toml, uv.lock
 ```
 
@@ -253,16 +195,14 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | 이름 | 기본값 | 설명 |
 | --- | --- | --- |
 | `AI_MODE` | `stub` | `stub` 가짜 응답 / `real` 실제 모델 |
-| `LLM_MODEL` | `Qwen/Qwen3.5-4B` | vLLM에 요청할 모델 이름이자 응답의 `model` 값 |
-| `VLLM_URL` | `http://localhost:8001` | LLM 서버 주소 |
-| `LLM_TIMEOUT` | `60` | LLM 읽기 제한(초). 로컬 Mac은 600 |
-| `LLM_MAX_MODEL_LEN` | `8192` | 입력+출력 토큰 한도. vLLM `--max-model-len`과 같게 |
+| `AWS_REGION` | `ap-northeast-2` | Bedrock 리전 (서울) |
+| `AWS_BEARER_TOKEN_BEDROCK` | (없음) | Bedrock API 키. LLM·임베딩 모두 이 키를 씀. 커밋·공유 금지 |
+| `LLM_MODEL` | `global.amazon.nova-2-lite-v1:0` | Bedrock 모델(추론 프로필) ID이자 응답의 `model` 값 |
+| `LLM_TIMEOUT` | `60` | LLM 읽기 제한(초) |
+| `LLM_MAX_ATTEMPTS` | `1` | LLM 호출 시도 횟수. 운영은 1(재시도는 BE가 함). 평가 스크립트로 몰아서 부를 때만 올린다 |
+| `LLM_MAX_MODEL_LEN` | `128000` | 입력+출력 토큰 한도 (모델 문맥 길이) |
 | `LLM_TEMPERATURE` | `0.7` | 생성 온도. P2(`/requirements/extract`)는 추출이라 이 값과 상관없이 0 |
-| `LLM_PRESENCE_PENALTY` | `1.5` | 반복 억제 |
-| `EMBED_REPO` | `google/embeddinggemma-2` | 임베딩 모델 (바꾸지 않음) |
-| `EMBED_REVISION` | `914f7f8…` | 임베딩 모델 버전 (고정, 바꾸지 않음) |
-| `EMBED_DTYPE` | `float32` | T4는 `float32`(fp16은 NaN 위험), L4는 `bfloat16` |
-| `HF_TOKEN` | (없음) | Hugging Face 토큰. compose가 컨테이너에 넘겨 줌 |
+| `EMBED_MODEL_ID` | `amazon.titan-embed-text-v2:0` | 임베딩 모델 (바꾸지 않음, 바꾸면 전체 재임베딩) |
 
 ## 관련 문서
 
@@ -275,6 +215,7 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | `작업목록.md` AI-01~16 | AI 담당 작업 목록 |
 | `contracts/api-ai.openapi.yaml` | API↔AI 계약 |
 | `fixtures/` | 세 레포가 같이 쓰는 예시 데이터 (평가·smoke 스크립트 입력) |
-| `adr/0001-gpu-model-serving.md` | 모델·GPU 선택, 임베딩 고정 규칙, 시작 순서 |
+| `adr/0007-bedrock-serving.md` | Bedrock 전환 (모델·리전·차원) |
+| `adr/0001-gpu-model-serving.md` | (0007로 대체) 이전 GPU 자체 서빙 구성 |
 | `adr/0003-report-diagnosis-gap-guide.md` | `/gap-guide`를 만든 이유 |
-| `adr/0005-eks-serving.md` | EKS 운영 구성 |
+| `adr/0005-eks-serving.md` | (0007로 대체) 이전 EKS GPU 운영 구성 |

@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from app import embedding
-from evals.embed_eval import default_device, query_text
+from evals.embed_eval import query_text
 
 CASES = Path(__file__).with_name("search_cases.json")
 TYPES = ["skill", "career", "project_summary", "episode"]
@@ -49,15 +49,14 @@ def rrf(cos: np.ndarray, kw: np.ndarray, limit: int) -> list[int]:
     return sorted(score, key=lambda i: -score[i])[:limit]
 
 
-def run(cases: dict, device: str, limit: int, expand: bool):
-    model = embedding.load(device=device)
+def run(cases: dict, limit: int, expand: bool):
     stats = {m: {"gold": Counter(), "found": Counter(), "all": 0, "n": 0, "mix": Counter(), "miss": []}
              for m in ("current", "per_type", "rrf")}
     for u in cases["users"]:
         docs = u["docs"]
-        dv = np.array(embedding.encode(model, "document", [(d["text"], d["title"]) for d in docs]))
+        dv = np.array(embedding.encode("document", [(d["text"], d["title"]) for d in docs]))
         texts = [query_text(q["text"], q["expansions"] if expand else []) for q in u["queries"]]
-        qv = np.array(embedding.encode(model, "query", [(t, None) for t in texts]))
+        qv = np.array(embedding.encode("query", [(t, None) for t in texts]))
         types = [d["type"] for d in docs]
         ids = [d["id"] for d in docs]
         for q, sims in zip(u["queries"], qv @ dv.T):
@@ -80,7 +79,6 @@ def run(cases: dict, device: str, limit: int, expand: bool):
                 s["all"] += gold <= got
                 if lost := sorted(gold - got):
                     s["miss"].append(f"{u['user'][:2]} {q['text']} → 빠짐 {lost}")
-    del model
     return stats
 
 
@@ -104,8 +102,7 @@ def report(stats: dict, limit: int):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--device", default=default_device())
     p.add_argument("--limit", type=int, default=20)
     p.add_argument("--no-expand", action="store_true", help="약어 확장어 없이 원문 질의만")
     args = p.parse_args()
-    report(run(json.loads(CASES.read_text(encoding="utf-8")), args.device, args.limit, not args.no_expand), args.limit)
+    report(run(json.loads(CASES.read_text(encoding="utf-8")), args.limit, not args.no_expand), args.limit)

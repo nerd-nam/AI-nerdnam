@@ -113,7 +113,7 @@ def _clean(o, req: GuideRequest):
 
 
 def _stub_content(req: GuideRequest, cited: list[int]):
-    """탭별 content 모양 그대로의 가짜 응답. FE·BE가 GPU 없이 개발할 때 쓴다 (AI 이슈 #9)"""
+    """탭별 content 모양 그대로의 가짜 응답. FE·BE가 Bedrock 키 없이 개발할 때 쓴다 (AI 이슈 #9)"""
     common: dict[str, Any] = dict(
         tab=req.tab,
         message=f"(stub) {req.tab} 핵심 메시지",

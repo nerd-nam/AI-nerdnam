@@ -1,9 +1,9 @@
 """요건 판정 평가 (AI-11, ADR-0006). 띄워 둔 AI 서버(real 모드)의 /match에 match_cases.json을 보내 사람 정답과 비교한다.
 
-    python -m evals.match_eval --build                      # 후보 20개를 D-12 방식별로 미리 뽑아 저장 (--extra model, 서버 불필요)
+    python -m evals.match_eval --build                      # 후보 20개를 D-12 방식별로 미리 뽑아 저장 (--extra eval, Bedrock 키 필요, 서버 불필요)
     AI_URL=http://localhost:8000 python -m evals.match_eval [--candidates per_type|current] [evals/out/match.json]
 
-후보를 미리 뽑아 두는 이유: Mac 16GB에서 LLM·AI 서버와 임베딩 모델을 한꺼번에 올리기 어렵다.
+후보를 미리 뽑아 두는 이유: 같은 후보로 프롬프트·모델만 바꿔 비교하려고.
 
 지표 (ADR-0006 "사람 검수 기준"):
 - 판정 일치율: 3단계가 정확히 같은 비율 (KPI 매칭 정확도 85%)
@@ -31,7 +31,7 @@ DOCS = Path(__file__).with_name("search_cases.json")
 ORDER = {"unmet": 0, "partial": 1, "met": 2}
 
 
-def build(device: str):
+def build():
     import numpy as np
 
     from app import embedding
@@ -39,11 +39,10 @@ def build(device: str):
     from evals.search_eval import current, per_type
 
     cases, docs = json.loads(CASES.read_text(encoding="utf-8")), json.loads(DOCS.read_text(encoding="utf-8"))
-    model = embedding.load(device=device)
     for u, du in zip(cases["users"], docs["users"]):
         d = du["docs"]
-        dv = np.array(embedding.encode(model, "document", [(x["text"], x["title"]) for x in d]))
-        qv = np.array(embedding.encode(model, "query", [(query_text(r["text"], r["expansions"]), None) for r in u["requirements"]]))
+        dv = np.array(embedding.encode("document", [(x["text"], x["title"]) for x in d]))
+        qv = np.array(embedding.encode("query", [(query_text(r["text"], r["expansions"]), None) for r in u["requirements"]]))
         types = [x["type"] for x in d]
         for r, sims in zip(u["requirements"], qv @ dv.T):
             kw = np.array([len(set(r["skills"]) & set(x["skills"])) for x in d], dtype=float)
@@ -129,10 +128,8 @@ if __name__ == "__main__":
     p.add_argument("out", nargs="?", type=Path, default=Path("evals/out/match.json"))
     p.add_argument("--build", action="store_true")
     p.add_argument("--candidates", default="per_type", choices=["per_type", "current"])
-    p.add_argument("--device", default=None)
     a = p.parse_args()
     if a.build:
-        from evals.embed_eval import default_device
-        build(a.device or default_device())
+        build()
         sys.exit()
     run(a.candidates, a.out)

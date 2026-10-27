@@ -1,7 +1,7 @@
 """evals/search_eval의 후보 선택 방식 (D-12). 모델 없이 점수 배열로 확인한다."""
 import pytest
 
-np = pytest.importorskip("numpy")  # numpy는 --extra model에만 있다
+np = pytest.importorskip("numpy")  # numpy는 --extra eval에만 있다
 from evals.search_eval import current, per_type, rrf  # noqa: E402
 
 # 기술 청크 4개가 사례 청크 2개보다 코사인이 높고, 사례 5번만 기술명이 겹친다

@@ -13,34 +13,41 @@ from app.schemas import HealthResponse
 log = logging.getLogger("uvicorn.error")
 
 
+# LLM 출력 스키마 전부 (tests/test_bedrock.py 가 Bedrock 스키마 규칙을 확인)
+OUTPUT_MODELS = [restructure.P1Out, requirements.P2Out, requirements.P2AbbrOut, match.P3Out, gap_guide.P6Out,
+                 *guide._MODEL.values()]
+
+
 async def warmup():
-    """모델별로 로딩·예열 요청 후 ready. 켠 직후 첫 요청이 느린 문제(Kaggle 20~24초) 대응.
-    한쪽이 실패해도 다른 쪽은 쓸 수 있게 상태를 따로 기록한다."""
-    try:
-        model = await asyncio.to_thread(embedding.load)
-        await asyncio.to_thread(embedding.encode, model, "query", [("warmup", None)])
-        state.embedder = model
-        state.models["embedding"] = "ready"
-    except Exception:
-        state.models["embedding"] = "error"
-        log.exception("embedding warmup failed")
-    try:
-        await llm.chat([{"role": "user", "content": "ping"}], max_tokens=8)
-        state.models["llm"] = "ready"
-    except Exception:
-        state.models["llm"] = "error"
-        log.exception("llm warmup failed")
+    """Bedrock 연결·키·모델 권한을 짧은 호출로 확인한 뒤 ready. 한쪽이 실패해도 다른 쪽은 쓸 수 있게 상태를 따로 기록한다.
+    이미 ready인 쪽은 다시 확인하다 실패해도 내리지 않는다 (일시 장애는 요청마다 503으로 처리됨)"""
+    for name, job in (("embedding", lambda: asyncio.to_thread(embedding.encode, "query", [("warmup", None)])),
+                      ("llm", lambda: llm.chat([{"role": "user", "content": "ping"}], max_tokens=8))):
+        try:
+            await job()
+            state.models[name] = "ready"
+        except Exception:
+            if state.models[name] != "ready":
+                state.models[name] = "error"
+            log.exception("%s warmup failed", name)
     log.info("models %s", state.models)
+
+
+async def keep_warm():
+    while True:
+        await warmup()
+        if all(v == "ready" for v in state.models.values()):
+            return
+        await asyncio.sleep(60)  # 실패하면 1분 뒤 다시
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 로딩은 백그라운드로: 그동안 /health 는 각 모델을 loading 으로 응답한다
-    task = asyncio.create_task(warmup()) if AI_MODE == "real" else None
+    # 연결 확인은 백그라운드로: 그동안 /health 는 각 모델을 loading 으로 응답한다
+    task = asyncio.create_task(keep_warm()) if AI_MODE == "real" else None
     yield
     if task:
         task.cancel()
-    await llm.client.aclose()
 
 
 DESCRIPTION = """API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`, 규칙은 SPEC 기획서 5.5 "AI 서버 공통 규칙".
@@ -53,8 +60,8 @@ DESCRIPTION = """API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`,
 
 app = FastAPI(title="nerdnam-ai", version="0.3.0", description=DESCRIPTION, lifespan=lifespan)
 
-# 503: 모델이 꺼짐·로딩 중 → API는 GPU_UNAVAILABLE. 502: LLM 출력 형식이 두 번 틀림 → AI_ERROR (기획서 5.5)
-_503: dict[int | str, dict[str, Any]] = {503: {"description": "모델 준비 안 됨 (GPU_UNAVAILABLE)"}}
+# 503: 연결 확인 중·Bedrock 호출 한도·장애 → API는 GPU_UNAVAILABLE. 502: LLM 출력 형식이 두 번 틀림 → AI_ERROR (기획서 5.5)
+_503: dict[int | str, dict[str, Any]] = {503: {"description": "모델 준비 안 됨·Bedrock 사용 불가 (GPU_UNAVAILABLE)"}}
 _502: dict[int | str, dict[str, Any]] = {502: {"description": "LLM 출력 형식 오류 (AI_ERROR)"}, 504: {"description": "LLM 생성 시간 초과 (TIMEOUT, 재시도 안 함)"}}
 app.include_router(embed.router, responses=_503)
 for r in (restructure, requirements, match, gap_guide, guide):
