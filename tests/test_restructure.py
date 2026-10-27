@@ -41,7 +41,7 @@ def test_spans_from_quotes_and_skills_filtered(llm_replies):
     llm_replies(draft("평균 응답 1.2초 → 0.3초", [Q2, Q1], skills=("Redis", "Kafka", "Kubernetes")))
     r = c.post("/restructure", json={"mode": "initial", "source_text": RAW, "skills": ["Redis"]}).json()
     ep = r["episodes"][0]
-    assert r["prompt_version"] == "p1_v3"
+    assert r["prompt_version"] == "p1_v4"
     assert ep["source_spans"] == [[RAW.find(Q1), RAW.find(Q1) + len(Q1)], [RAW.find(Q2), RAW.find(Q2) + len(Q2)]]
     assert ep["skills"] == ["Redis", "Kafka"]  # Kubernetes는 입력·원문에 없어 제거
     assert ep["clarifications"] == []
@@ -153,3 +153,49 @@ def test_sampling_sent(monkeypatch):
     monkeypatch.setattr(llm.client, "post", post)
     asyncio.run(llm.chat([{"role": "user", "content": "ping"}]))
     assert sent["temperature"] == 0.7 and sent["top_k"] == 20 and sent["presence_penalty"] == 1.5
+
+
+# AI #25: 수정 요청(피드백)에 지금 사례 본문을 그대로 돌려주면 성공으로 넘기지 않는다
+Q_NEW = {"field": "result", "question": "성과 수치가 있나요?", "example": None}
+
+
+def copy_of_target(*clarifications):
+    return json.dumps({"episodes": [{**TARGET, "role": "", "skills": [], "metrics": [], "quotes": [Q2],
+                                     "clarifications": list(clarifications)}]}, ensure_ascii=False)
+
+
+def revise(feedback="제목을 짧게", **extra):
+    return c.post("/restructure", json={"mode": "episode", "source_text": RAW, "target_episode": TARGET,
+                                        "feedback": feedback, **extra})
+
+
+def test_feedback_ignored_retried_then_502(llm_replies):
+    calls = llm_replies(copy_of_target(), copy_of_target())
+    assert revise().status_code == 502  # API는 AI_ERROR
+    assert calls[0][-1]["content"].startswith("고칠 방향: 제목을 짧게")  # 피드백을 따로 한 번 더 준다
+    assert len(calls) == 2 and "그대로 돌려줬다" in calls[1][-1]["content"]
+
+
+def test_question_only_change_is_retried(llm_replies):
+    calls = llm_replies(copy_of_target(Q_NEW), draft("평균 응답 0.3초", [Q2]))
+    assert revise().status_code == 200
+    assert len(calls) == 2  # 확인 질문만 붙고 본문이 같으면 반영한 것으로 보지 않는다
+
+
+def test_same_body_with_new_question_after_retry_ok(llm_replies):
+    # 피드백이 원문에 없는 사실을 요구한 경우: 본문은 그대로 두고 확인 질문으로 묻는 것이 맞다
+    llm_replies(copy_of_target(), copy_of_target(Q_NEW))
+    r = revise("성과를 50% 개선으로 써 줘")
+    assert r.status_code == 200 and r.json()["episodes"][0]["clarifications"][0]["question"] == Q_NEW["question"]
+
+
+def test_changed_body_not_retried(llm_replies):
+    calls = llm_replies(draft("평균 응답 0.3초", [Q2]))
+    assert revise().status_code == 200 and len(calls) == 1
+
+
+def test_answer_without_feedback_not_checked(llm_replies):
+    calls = llm_replies(copy_of_target())
+    r = c.post("/restructure", json={"mode": "episode", "source_text": RAW, "target_episode": TARGET,
+                                     "answer": {"question": "역할은?", "answer": "백엔드"}})
+    assert r.status_code == 200 and len(calls) == 1

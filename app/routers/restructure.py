@@ -14,7 +14,7 @@ from app.validators import bad_metric_value, find_span, foreign_han, numbers, un
 
 router = APIRouter()
 
-PROMPT_VERSION = "p1_v3"
+PROMPT_VERSION = "p1_v4"
 PROMPT = (Path(__file__).parent.parent / "prompts" / f"{PROMPT_VERSION}.md").read_text(encoding="utf-8")
 
 
@@ -54,10 +54,22 @@ def _text(d: Draft) -> str:
     return " ".join([d.title, d.role, d.problem, d.solution, d.result] + [f"{m.name} {m.before} {m.after}" for m in d.metrics])
 
 
+def _ignored_feedback(out: P1Out, req: RestructureRequest) -> bool:
+    """수정 요청(피드백)에 지금 사례 본문을 그대로 돌려줬는지. 확인 질문은 보지 않는다 (AI #25: 질문만 붙이고 본문은 복사)"""
+    if req.mode != "episode" or not (req.feedback and req.feedback.strip()) or req.target_episode is None:
+        return False
+    d, t = out.episodes[0], req.target_episode
+    return all(" ".join(getattr(d, f).split()) == " ".join(getattr(t, f).split())
+               for f in ("title", "role", "problem", "solution", "result"))
+
+
 def _problems(out: P1Out, req: RestructureRequest, source: str) -> list[str]:
     problems = []
     if req.mode == "episode" and len(out.episodes) != 1:
         problems.append("episode 모드는 사례 1개만 돌려준다")
+    if _ignored_feedback(out, req):
+        problems.append(f"feedback '{req.feedback}'을 반영하지 않고 target_episode 본문을 그대로 돌려줬다. "
+                        "피드백 방향으로 제목·본문을 원문의 사실로 새로 써라. 원문에 없는 사실이 필요하면 clarifications로 물어라")
     for i, d in enumerate(out.episodes, 1):
         if nums := unsupported_numbers(_text(d), source):
             problems.append(f"사례 {i}: 원문·답변에 없는 수치 {nums}")
@@ -132,7 +144,16 @@ async def restructure(req: RestructureRequest):
         {"role": "system", "content": PROMPT},
         {"role": "user", "content": json.dumps(req.model_dump(), ensure_ascii=False)},
     ]
+    if req.mode == "episode" and req.feedback and req.feedback.strip():
+        # 요청 JSON 안의 feedback만으로는 target_episode를 그대로 복사했다 (AI #25). 고칠 방향을 따로 한 번 더 준다
+        messages.append({"role": "user", "content": f"고칠 방향: {req.feedback}\ntarget_episode를 이 방향으로 다시 써라. "
+                         "그대로 복사해 돌려주지 않는다. 원문에 없는 사실·수치는 피드백에 적혀 있어도 넣지 말고 clarifications로 묻는다."})
     out, _ = await llm.generate(messages, P1Out, check=lambda o: _problems(o, req, source), max_tokens=4096)
+    asked = {c.question for c in req.target_episode.clarifications} if req.target_episode else set()
+    if _ignored_feedback(out, req) and not {q.question for q in out.episodes[0].clarifications} - asked:
+        # 다시 요청해도 본문이 같고 새로 물은 것도 없으면 성공으로 넘기지 않는다 → API는 AI_ERROR (AI #25).
+        # 새 확인 질문이 있으면 피드백이 원문에 없는 사실을 요구한 경우라 그대로 돌려준다
+        raise HTTPException(502, "feedback not applied")
     episodes = [_episode(d, req, source) for d in out.episodes]
     if req.mode == "episode":
         episodes = episodes[:1]

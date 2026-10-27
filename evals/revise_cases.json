@@ -1,0 +1,151 @@
+{
+  "_note": "사례 수정 요청(/restructure mode=episode + feedback) 확인 세트 (AI #25). expect=change는 fields 중 하나 이상이 바뀌어야 맞음(피드백이 가리키는 필드), keep은 원문에 없는 사실을 요구한 피드백이라 원문에 없는 수치가 없어야 맞음(본문은 바뀌어도 됨). 프로젝트 p102는 SPEC fixtures, collab은 이슈 #25 재현과 같은 모양의 예시, deploy는 예시.",
+  "projects": {
+    "p102": {
+      "title": "결제 승인 API 성능 개선",
+      "skills": [
+        "Spring Boot",
+        "Redis",
+        "Kafka"
+      ],
+      "source_text": "작년 프로모션 때 결제 승인 API가 느려져서 장애 직전까지 갔다. 평균 응답이 1.2초까지 늘었고 결제 이탈이 생겼다. 원인을 보니 승인할 때마다 가맹점 정보를 DB에서 조회하고, 알림이나 포인트 적립 같은 후처리를 동기로 처리하고 있었다.\n\n가맹점 조회는 Redis 캐시로 바꾸고 후처리는 Kafka로 비동기 분리했다. 팀 4명 중 백엔드 리드로 설계와 구현을 맡았다. 그 결과 평균 응답이 0.3초로 줄었다.",
+      "target": {
+        "title": "결제 승인 응답 지연 개선",
+        "role": "백엔드 리드 (팀 4명)",
+        "skills": [
+          "Spring Boot",
+          "Redis",
+          "Kafka"
+        ],
+        "problem": "프로모션 기간 결제 승인 응답이 평균 1.2초까지 느려져 이탈 발생",
+        "solution": "가맹점 조회를 Redis 캐시로 전환, 승인 후처리를 Kafka 비동기로 분리",
+        "result": "평균 응답 1.2초 → 0.3초",
+        "metrics": [
+          {
+            "name": "평균 응답시간",
+            "before": "1.2초",
+            "after": "0.3초",
+            "source": "raw_text"
+          }
+        ]
+      }
+    },
+    "collab": {
+      "title": "실시간 협업 편집 서비스",
+      "skills": [
+        "Node.js",
+        "Socket.IO",
+        "Redis"
+      ],
+      "source_text": "실시간 협업 문서 편집 서비스에서 사용자가 늘자 다른 사람의 변경 사항이 늦게 보였다. 클라이언트가 2초마다 API를 폴링하고 있어서 요청도 과도했다.\n\nSocket.IO로 실시간 통신을 도입하고, 서버가 여러 대라 Redis Pub/Sub으로 서버 간 이벤트를 동기화했다. 프론트엔드 2명, 백엔드 1명인 팀에서 백엔드를 맡았다. 폴링 API 호출이 사라졌고 편집 내용이 바로 반영되어 보이게 됐다.",
+      "target": {
+        "title": "실시간 협업 지연 및 과도한 API 요청 해결",
+        "role": "백엔드 담당",
+        "skills": [
+          "Node.js",
+          "Socket.IO",
+          "Redis"
+        ],
+        "problem": "2초 주기 폴링으로 변경 사항이 늦게 보이고 API 요청이 과도함",
+        "solution": "Socket.IO 기반 실시간 통신 도입",
+        "result": "폴링 API 호출이 사라지고 편집 내용이 바로 반영됨",
+        "metrics": []
+      }
+    },
+    "deploy": {
+      "title": "배포 자동화",
+      "skills": [
+        "GitHub Actions",
+        "Docker"
+      ],
+      "source_text": "수동 배포라 한 번에 40분이 걸렸고, 배포 실수로 장애가 두 번 났다. GitHub Actions로 빌드·테스트·배포 파이프라인을 만들고 Docker 이미지로 배포 방식을 통일했다. 이 작업은 혼자 맡았다. 배포 시간이 40분에서 8분으로 줄었고, 이후 배포 실수로 인한 장애는 없었다.",
+      "target": {
+        "title": "배포 자동화로 배포 시간 단축",
+        "role": "단독 담당",
+        "skills": [
+          "GitHub Actions",
+          "Docker"
+        ],
+        "problem": "수동 배포로 40분 소요, 배포 실수로 장애 2회",
+        "solution": "GitHub Actions 파이프라인 구축, Docker 이미지로 배포 통일",
+        "result": "배포 시간 40분 → 8분, 이후 배포 실수 장애 없음",
+        "metrics": [
+          {
+            "name": "배포 시간",
+            "before": "40분",
+            "after": "8분",
+            "source": "raw_text"
+          }
+        ]
+      }
+    }
+  },
+  "cases": [
+    {
+      "project": "collab",
+      "feedback": "Redis Pub/Sub 구조를 도입한것을 조금 더 중점적으로 다루고 싶어",
+      "expect": "change",
+      "fields": [
+        "title",
+        "solution"
+      ]
+    },
+    {
+      "project": "collab",
+      "feedback": "그냥 아예 새로 작성해봐",
+      "expect": "change",
+      "fields": [
+        "title",
+        "problem",
+        "solution",
+        "result"
+      ]
+    },
+    {
+      "project": "p102",
+      "feedback": "제목을 더 짧게 바꿔 줘",
+      "expect": "change",
+      "fields": [
+        "title"
+      ]
+    },
+    {
+      "project": "p102",
+      "feedback": "Kafka 비동기 분리를 더 강조해 줘",
+      "expect": "change",
+      "fields": [
+        "title",
+        "solution"
+      ]
+    },
+    {
+      "project": "deploy",
+      "feedback": "그냥 아예 새로 작성해봐",
+      "expect": "change",
+      "fields": [
+        "title",
+        "problem",
+        "solution",
+        "result"
+      ]
+    },
+    {
+      "project": "deploy",
+      "feedback": "문제 상황을 더 구체적으로 써 줘",
+      "expect": "change",
+      "fields": [
+        "problem"
+      ]
+    },
+    {
+      "project": "p102",
+      "feedback": "성과를 50% 개선으로 써 줘",
+      "expect": "keep"
+    },
+    {
+      "project": "collab",
+      "feedback": "응답 속도가 몇 ms 빨라졌는지 넣어 줘",
+      "expect": "keep"
+    }
+  ]
+}
