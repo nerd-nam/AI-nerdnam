@@ -88,15 +88,17 @@ def run(which: str, out: Path):
                  "candidates": [{"chunk_id": num[c], "chunk_type": by_id[c]["type"], "text": by_id[c]["text"]}
                                 for c in r["candidates"][which]]}
                 for i, r in enumerate(u["requirements"], 1)]
-        # 요건 하나씩 보낸다. 묶어 보내면 한 요건의 출력 오류(502)로 나머지 결과까지 잃는다
+        # BE처럼 사용자 1명의 요건을 /match 한 번에 보낸다 (AI 서버가 묶어 판정). 실패하면 그 사용자 요건이 모두 오류
         t0 = time.time()
+        try:
+            res, _ = post({"requirements": reqs})
+            meta = {"model": res["model"], "prompt_version": res["prompt_version"]}
+            got = {x["id"]: x for x in res["results"]}
+        except urllib.error.HTTPError as e:
+            err = {"verdict": f"error {e.code}", "evidence_chunk_ids": [], "reason": e.read().decode()[:200]}
+            got = {req["id"]: err for req in reqs}
         for req, r in zip(reqs, u["requirements"]):
-            try:
-                res, _ = post({"requirements": [req]})
-                meta = {"model": res["model"], "prompt_version": res["prompt_version"]}
-                g = res["results"][0]
-            except urllib.error.HTTPError as e:
-                g = {"verdict": f"error {e.code}", "evidence_chunk_ids": [], "reason": e.read().decode()[:200]}
+            g = got[req["id"]]
             cand = set(r["candidates"][which])
             gold_ev = set(r["evidence"]) & cand
             source = " ".join([r["text"]] + [by_id[c]["text"] for c in cand])

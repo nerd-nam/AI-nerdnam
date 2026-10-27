@@ -1,4 +1,6 @@
 """Bedrock 전환 (ADR-0007): 출력 스키마 규칙, boto3 오류 → 계약 코드(C-04), /embed 순서·차원"""
+import json
+
 import pytest
 from botocore.exceptions import (
     ClientError,
@@ -94,16 +96,17 @@ def test_titan_request(monkeypatch):
 
 
 def test_usage_summed_per_request(monkeypatch):
-    # 요건 2개를 동시에 판정 → 두 호출의 토큰이 응답 usage에 합쳐진다. 다음 요청은 0부터
+    # 요건 11개 → 묶음 2개(10·1)를 동시에 판정 → 두 호출의 토큰이 응답 usage에 합쳐진다. 다음 요청은 0부터
     monkeypatch.setitem(state.models, "llm", "ready")
 
     def converse(**req):
-        return {"output": {"message": {"content": [{"toolUse": {"name": "out", "input": {
-            "verdict": "unmet", "evidence_chunk_ids": [], "reason": "관련 경험 없음"}}}]}},
-            "usage": {"inputTokens": 100, "outputTokens": 7}}
+        ids = [x["id"] for x in json.loads(req["messages"][0]["content"][0]["text"])["requirements"]]
+        out = {"results": [{"id": i, "verdict": "unmet", "evidence_chunk_ids": [], "reason": "관련 경험 없음"} for i in ids]}
+        return {"output": {"message": {"content": [{"toolUse": {"name": "out", "input": out}}]}},
+                "usage": {"inputTokens": 100, "outputTokens": 7}}
     monkeypatch.setattr(llm.client, "converse", converse)
     sk = {"chunk_id": 1, "chunk_type": "skill", "text": "Kafka"}
-    req = {"requirements": [{"id": i, "type": "required", "text": "Go", "candidates": [sk]} for i in (1, 2)]}
+    req = {"requirements": [{"id": i, "type": "required", "text": "Go", "candidates": [sk]} for i in range(1, 12)]}
     assert c.post("/match", json=req).json()["usage"] == {"input_tokens": 200, "output_tokens": 14, "llm_calls": 2}
     assert c.post("/match", json={"requirements": req["requirements"][:1]}).json()["usage"]["llm_calls"] == 1
 
