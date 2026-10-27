@@ -63,7 +63,6 @@ async def main(out_path: Path):
     data = json.loads(CASES.read_text(encoding="utf-8"))
     state.models["llm"] = "ready"
     rows = [await run(c, data["projects"][c["project"]]) for c in data["cases"]]
-    await llm.client.aclose()
     print(f"prompt={r.PROMPT_VERSION}  ok {sum(x['verdict'] == 'ok' for x in rows)}/{len(rows)}  "
           f"다시 요청 {sum(x['calls'] > 1 for x in rows)}건  평균 {sum(x['secs'] for x in rows) / len(rows):.1f}s")
     for x in rows:

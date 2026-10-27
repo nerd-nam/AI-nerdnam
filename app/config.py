@@ -3,16 +3,15 @@ import os
 # stub: 가짜 응답 (키 없이 개발할 때, 기본값) / real: AWS Bedrock 호출 (ADR-0007)
 AI_MODE = os.getenv("AI_MODE", "stub")
 
-# Bedrock (서울 리전 In-Region: 요청이 리전 밖으로 나가지 않음). 키 값은 로그·응답에 남기지 않는다
+# Bedrock 서울 리전. 임베딩은 In-Region, LLM은 Global 교차 리전 프로필. 키 값은 로그·응답에 남기지 않는다
+# 호출은 boto3(bedrock-runtime). 인증: AWS_BEARER_TOKEN_BEDROCK(Bedrock API 키, boto3가 직접 읽음) 또는 IAM 자격 증명
 AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-2")
-BEDROCK_URL = os.getenv("BEDROCK_URL", f"https://bedrock-runtime.{AWS_REGION}.amazonaws.com")
-BEDROCK_API_KEY = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
 
 # LLM. 응답에 담는 모델 이름이기도 하다 (기획서 5.5).
-# DeepSeek-V3.1은 Bedrock에서 Legacy, 2027-03-30 종료 → 후속 모델로 바꿀 때 이 값만 바꾸고 평가를 다시 돌린다
-LLM_MODEL = os.getenv("LLM_MODEL", "deepseek.v3-v1:0")
+# Nova 2 Lite는 서울에서 Global 교차 리전 추론 프로필로만 제공된다 (요청이 국외에서 처리될 수 있음, ADR-0007)
+LLM_MODEL = os.getenv("LLM_MODEL", "global.amazon.nova-2-lite-v1:0")
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))  # 읽기 제한(초)
-LLM_MAX_MODEL_LEN = int(os.getenv("LLM_MAX_MODEL_LEN", "128000"))  # 입력+출력 토큰 한도 (모델 문맥 128K)
+LLM_MAX_MODEL_LEN = int(os.getenv("LLM_MAX_MODEL_LEN", "128000"))  # 입력+출력 토큰 한도. 모델 문맥(1M)보다 작게 128K로 둔다
 # 생성 설정. temperature는 평가 세트로 비교할 값이라 환경변수로 바꿀 수 있다
 LLM_SAMPLING = {
     "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),

@@ -138,12 +138,11 @@ def test_guide_trims_evidence_when_too_long(llm_replies, monkeypatch):
 
 
 def test_llm_http_error_is_502(monkeypatch):
-    import httpx
+    from botocore.exceptions import ClientError
     monkeypatch.setitem(state.models, "llm", "ready")
 
     async def chat(*a, **k):
-        resp = httpx.Response(400, text="maximum context length exceeded", request=httpx.Request("POST", "http://x"))
-        raise httpx.HTTPStatusError("bad", request=resp.request, response=resp)
+        raise ClientError({"Error": {"Code": "ValidationException", "Message": "Input is too long"}}, "Converse")
     monkeypatch.setattr(llm, "chat", chat)
     r = c.post("/match", json={"requirements": [{"id": 1, "type": "required", "text": "x", "candidates": [EP]}]})
-    assert r.status_code == 502 and "400" in r.json()["detail"]  # 500이면 API가 같은 요청을 다시 보낸다
+    assert r.status_code == 502 and "ValidationException" in r.json()["detail"]  # 500이면 API가 같은 요청을 다시 보낸다

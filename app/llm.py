@@ -1,69 +1,111 @@
-"""Bedrock(OpenAI 호환 Chat Completions) 호출과 JSON 출력 강제 (기획서 5.2, 작업목록 AI-04, ADR-0007)."""
-import httpx
+"""Bedrock Converse API(boto3) 호출과 JSON 출력 강제 (기획서 5.2, 작업목록 AI-04, ADR-0007).
+
+LLM(Converse)·임베딩(InvokeModel, app/embedding.py) 모두 boto3로 bedrock-runtime을 부른다.
+인증은 boto3 기본 순서: 환경변수 AWS_BEARER_TOKEN_BEDROCK(Bedrock API 키) → IAM 자격 증명(운영 Pod 역할 등)."""
+import asyncio
+import json
+import os
+
+import boto3
+from botocore.config import Config
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    ConnectionClosedError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
 
-from app.config import (
-    BEDROCK_API_KEY,
-    BEDROCK_URL,
-    LLM_MAX_MODEL_LEN,
-    LLM_MODEL,
-    LLM_SAMPLING,
-    LLM_TIMEOUT,
-)
+from app.config import AWS_REGION, LLM_MAX_MODEL_LEN, LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT
 
-client = httpx.AsyncClient(base_url=BEDROCK_URL, headers={"Authorization": f"Bearer {BEDROCK_API_KEY}"},
-                           timeout=httpx.Timeout(LLM_TIMEOUT, connect=2))
+# 재시도는 BE가 1회 한다(C-04). boto3 기본 재시도(최대 5회)를 두면 BE 읽기 제한을 넘긴다.
+# LLM_MAX_ATTEMPTS는 평가 스크립트처럼 몰아서 부를 때만 올린다 (호출 한도에 맞춰 기다렸다 다시 보냄)
+client = boto3.client("bedrock-runtime", region_name=AWS_REGION, config=Config(
+    read_timeout=LLM_TIMEOUT, connect_timeout=2, max_pool_connections=32,
+    retries={"mode": "adaptive", "total_max_attempts": int(os.getenv("LLM_MAX_ATTEMPTS", "1"))}))
 
-# 호출 한도 초과(429)·Bedrock 장애(5xx)는 잠시 뒤 다시 하면 되는 실패 → 503 (API는 GPU_UNAVAILABLE, 1회 재시도)
-_RETRYABLE = {429, 500, 502, 503, 504}
+ERRORS = (ClientError, BotoCoreError)
+# 잠시 뒤 다시 하면 되는 실패 → 503 (API는 GPU_UNAVAILABLE, 1회 재시도)
+_RETRYABLE = {"ThrottlingException", "ServiceUnavailableException", "InternalServerException",
+              "ModelNotReadyException", "ServiceQuotaExceededException", "ModelErrorException"}
+_UNREACHABLE = (EndpointConnectionError, ConnectTimeoutError, ConnectionClosedError)
 
 
-def http_error(e: httpx.HTTPError) -> HTTPException:
-    """Bedrock 호출 실패를 계약 C-04 응답 코드로 (기획서 5.5). LLM·임베딩이 같이 쓴다"""
-    if isinstance(e, httpx.HTTPStatusError):
-        code = e.response.status_code
+def http_error(e: Exception) -> HTTPException:
+    """Bedrock(boto3) 호출 실패를 계약 C-04 응답 코드로 (기획서 5.5). LLM·임베딩이 같이 쓴다"""
+    if isinstance(e, ReadTimeoutError):
+        return HTTPException(504, "bedrock timeout")  # 읽기 제한 안에 안 끝남 → API는 TIMEOUT, 재시도 안 함
+    if isinstance(e, ClientError):
+        code = e.response.get("Error", {}).get("Code", "")
+        if code == "ModelTimeoutException":
+            return HTTPException(504, "bedrock model timeout")
         if code in _RETRYABLE:
             return HTTPException(503, f"bedrock unavailable {code}")
-        # 400 입력이 한도를 넘음·403 키 오류 등. 다시 보내도 같다 → API는 AI_ERROR
-        return HTTPException(502, f"bedrock error {code}: {e.response.text[:200]}")
-    if isinstance(e, httpx.ReadTimeout):
-        return HTTPException(504, "bedrock timeout")  # 읽기 제한 안에 안 끝남 → API는 TIMEOUT, 재시도 안 함
-    return HTTPException(503, "bedrock unreachable")  # 연결 실패
+        # ValidationException(입력이 한도를 넘음 등)·AccessDeniedException(키·권한·모델 계약) 등. 다시 보내도 같다 → API는 AI_ERROR
+        return HTTPException(502, f"bedrock error {code}: {e.response.get('Error', {}).get('Message', '')[:200]}")
+    if isinstance(e, _UNREACHABLE):
+        return HTTPException(503, "bedrock unreachable")
+    return HTTPException(502, f"bedrock error {type(e).__name__}")  # 자격 증명 없음 등 설정 문제
+
+
+def _request(messages: list[dict], schema: dict | None, max_tokens: int, temperature: float | None) -> dict:
+    """OpenAI 모양 messages → Converse 요청. system은 따로 빼고, 같은 역할이 이어지면 한 메시지로 합친다
+    (Converse는 user·assistant가 번갈아 와야 한다. /restructure는 user를 두 번 보냄)"""
+    msgs: list[dict] = []
+    for m in messages:
+        if m["role"] == "system":
+            continue
+        if msgs and msgs[-1]["role"] == m["role"]:
+            msgs[-1]["content"].append({"text": m["content"]})
+        else:
+            msgs.append({"role": m["role"], "content": [{"text": m["content"]}]})
+    req = {
+        "modelId": LLM_MODEL,
+        "messages": msgs,
+        "inferenceConfig": {
+            "maxTokens": max_tokens,
+            "temperature": LLM_SAMPLING["temperature"] if temperature is None else temperature,  # 추출처럼 답이 하나인 작업은 0 (P2)
+            "topP": LLM_SAMPLING["top_p"],
+        },
+    }
+    if system := [{"text": m["content"]} for m in messages if m["role"] == "system"]:
+        req["system"] = system
+    if schema:
+        # 출력 강제는 도구 1개(out)를 반드시 부르게 하는 방식. Nova는 outputConfig(json_schema)를 지원하지 않는다
+        req["toolConfig"] = {"tools": [{"toolSpec": {"name": "out", "description": "결과를 이 형식으로 돌려준다",
+                                                     "inputSchema": {"json": schema}}}],
+                             "toolChoice": {"tool": {"name": "out"}}}
+    return req
 
 
 async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048, temperature: float | None = None) -> str:
-    body = {
-        "model": LLM_MODEL,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        **LLM_SAMPLING,
-    }
-    if temperature is not None:  # 추출처럼 답이 하나인 작업은 0 (P2)
-        body["temperature"] = temperature
-    if schema:
-        body["response_format"] = {"type": "json_schema", "json_schema": {"name": "out", "schema": schema}}
-    r = await client.post("/openai/v1/chat/completions", json=body)
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    r = await asyncio.to_thread(client.converse, **_request(messages, schema, max_tokens, temperature))
+    blocks = r["output"]["message"]["content"]
+    if schema:  # 도구 입력이 곧 출력 JSON. 도구 호출이 없으면(길이 초과 등) "" → 검증 실패로 1회 재시도
+        return next((json.dumps(b["toolUse"]["input"], ensure_ascii=False) for b in blocks if "toolUse" in b), "")
+    # 추론 블록(reasoningContent)이 먼저 올 수 있어 text 블록을 고른다
+    return next(b["text"] for b in blocks if "text" in b)
 
 
 def fits(messages: list[dict], max_tokens: int) -> bool:
     """입력+출력이 문맥 한도 안에 드는지 대략 확인. 한국어 JSON은 토큰 하나에 약 2.1자(1.97~2.68, 로컬 실측)라
-    1.8자로 넉넉하게 잡는다(Qwen 기준, DeepSeek도 비슷). 스키마·채팅 틀 몫으로 300토큰을 더 뺀다."""
+    1.8자로 넉넉하게 잡는다(Qwen 기준). 스키마·채팅 틀 몫으로 300토큰을 더 뺀다."""
     # ponytail: 글자 수 어림. 한도 근처에서 빗나가면 Bedrock CountTokens 호출로 바꾼다
     chars = sum(len(m["content"]) for m in messages)
     return chars / 1.8 + max_tokens + 300 <= LLM_MAX_MODEL_LEN
 
 
-# Bedrock 구조화 출력이 받지 않는 키워드. 빼도 pydantic 검증 → 1회 재시도가 그대로 잡는다
+# Bedrock 도구 스키마에서 빼는 키워드. 빼도 pydantic 검증 → 1회 재시도가 그대로 잡는다
 _UNSUPPORTED = {"minLength", "maxLength", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "maxItems", "pattern", "format"}
 
 
 def strict_schema(schema: dict) -> dict:
     """모든 필드를 필수로 바꾼 JSON 스키마. 기본값이 있는 필드는 생략 가능이 되어 모델이 통째로 건너뛴다
     (로컬 테스트 2026-10-23: role·skills 4번 중 4번 빠짐). 값이 없으면 ""·[]·null을 직접 쓰게 한다.
-    Bedrock 규칙도 맞춘다: object마다 additionalProperties false, minItems는 0·1만, 길이·범위 제약 없음."""
+    Bedrock 스키마 규칙도 맞춘다: object마다 additionalProperties false, minItems는 0·1만, 길이·범위 제약 없음."""
     def walk(x):
         if isinstance(x, dict):
             if "properties" in x:
@@ -91,7 +133,7 @@ async def generate[T: BaseModel](messages: list[dict], out: type[T], check=None,
     for _ in range(2):
         try:
             raw = await chat(messages, schema=strict_schema(out.model_json_schema()), max_tokens=max_tokens, temperature=temperature)
-        except httpx.HTTPError as e:
+        except ERRORS as e:
             raise http_error(e)
         try:
             obj = out.model_validate_json(raw)

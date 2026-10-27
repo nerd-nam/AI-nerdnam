@@ -6,6 +6,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
+    "boto3>=1.43.119",
 ]
 
 [project.optional-dependencies]

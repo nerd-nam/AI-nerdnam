@@ -53,7 +53,7 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 
   | 상태 코드 | 뜻 | API 서버 처리 |
   | --- | --- | --- |
-  | 503 | 예열 중, Bedrock 호출 한도 초과(429)·장애(5xx)·연결 실패 | `GPU_UNAVAILABLE`, 1회 재시도 |
+  | 503 | 연결 확인 중, Bedrock 호출 한도 초과·일시 장애·연결 실패 | `GPU_UNAVAILABLE`, 1회 재시도 |
   | 502 | LLM 출력 형식이 두 번 연속 틀림, Bedrock이 요청을 거부(400·403 등) | `AI_ERROR`, 1회 재시도 |
   | 504 | LLM 생성 시간 초과 | `TIMEOUT`, 재시도 안 함 |
   | 422 | 요청 형식이 틀림 | `AI_ERROR`, 재시도 안 함 |
@@ -67,15 +67,15 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 | 모드 | 언제 쓰나 | 동작 |
 | --- | --- | --- |
 | `stub` (기본값) | 로컬 개발, BE 연동 개발 | Bedrock 호출 없이 형식만 같은 가짜 응답을 돌려줌 |
-| `real` | 운영, 로컬에서 실제 모델 확인 | AWS Bedrock을 호출함. 시작하면 연결 확인·예열 |
+| `real` | 운영, 로컬에서 실제 모델 확인 | AWS Bedrock을 호출함. 시작하면 연결 확인 |
 
 `real` 모드의 `/health` 응답 `models` 값은 아래와 같습니다. LLM과 임베딩은 따로 표시됩니다.
 
 | 값 | 뜻 |
 | --- | --- |
-| `loading` | 예열 중 (켠 직후. 출력 스키마마다 첫 요청이 최대 90초) |
+| `loading` | 연결 확인 중 (켠 직후 몇 초) |
 | `ready` | 사용 가능 |
-| `error` | 예열 실패 (키·권한·리전 확인. 1분마다 다시 시도) |
+| `error` | 연결 확인 실패 (키·권한·리전 확인. 1분마다 다시 시도) |
 
 API 서버는 `embedding`이 `ready`일 때 "임베딩 대기" 청크를 다시 처리합니다. `llm`이 준비되지 않았는데 생성 요청이 오면 AI 서버가 503을 돌려줍니다.
 
@@ -83,12 +83,12 @@ API 서버는 `embedding`이 `ready`일 때 "임베딩 대기" 청크를 다시 
 
 | 모델 | 용도 | 어디서 돌아가나 |
 | --- | --- | --- |
-| `deepseek.v3-v1:0` (DeepSeek-V3.1) | LLM (P1~P6) | AWS Bedrock 서울 리전 |
-| `amazon.titan-embed-text-v2:0` (1024차원) | `/embed` | AWS Bedrock 서울 리전 |
+| `global.amazon.nova-2-lite-v1:0` (Amazon Nova 2 Lite) | LLM (P1~P6) | AWS Bedrock 서울 리전, Global 교차 리전 추론 프로필 (boto3 Converse) |
+| `amazon.titan-embed-text-v2:0` (1024차원) | `/embed` | AWS Bedrock 서울 리전, bedrock-runtime(boto3 InvokeModel) |
 
-- 둘 다 서울 리전 안에서만 처리합니다(In-Region). 요청이 리전 밖으로 나가지 않습니다.
+- 임베딩은 서울 리전 안에서만 처리합니다(In-Region). LLM(Nova 2 Lite)은 서울에서 Global 교차 리전 프로필로만 제공돼 **요청이 국외에서 처리될 수 있습니다.**
 - 임베딩 모델과 차원은 **고정**입니다(`app/config.py`). 바꾸면 저장된 벡터를 전부 다시 계산해야 하므로 ADR 합의 없이 바꾸지 마세요.
-- DeepSeek-V3.1은 Bedrock에서 Legacy 상태이고 **2027-03-30에 종료**됩니다. 그 전에 `LLM_MODEL`만 바꾸고 평가를 다시 돌립니다.
+- LLM을 바꿀 때는 `LLM_MODEL`만 바꾸고 평가를 다시 돌립니다.
 - Bedrock은 새 JSON 스키마를 처음 받을 때 준비에 최대 90초가 걸리고 24시간 캐시합니다. 그래서 AI 서버가 시작할 때와 12시간마다 출력 스키마를 미리 한 번씩 보냅니다(`app/main.py`).
 
 ## 실제 모델로 실행하기
@@ -141,11 +141,11 @@ uv run python -m evals.match_eval                                 # 요건 판�
 ```text
 AI-nerdnam/
 ├── app/                      서버 본체
-│   ├── main.py               앱 시작, 예열(스키마 준비), /health, 라우터 등록
+│   ├── main.py               앱 시작, 연결 확인, /health, 라우터 등록
 │   ├── config.py             환경변수 읽기
 │   ├── schemas.py            요청·응답 모델 = API↔AI 계약의 출처
-│   ├── llm.py                Bedrock LLM 호출, JSON 형식 강제, 오류 → 상태 코드
-│   ├── embedding.py          Bedrock Titan 임베딩 호출 (서버와 evals가 같이 씀)
+│   ├── llm.py                Bedrock LLM 호출(boto3 Converse), JSON 형식 강제, 오류 → 상태 코드
+│   ├── embedding.py          Bedrock Titan 임베딩 호출(boto3) (서버와 evals가 같이 씀)
 │   ├── validators.py         LLM 출력 검증 (형식, 원문에 없는 수치, 인용 ID)
 │   ├── state.py              모델 상태 (loading/ready/error)
 │   ├── routers/              엔드포인트별 코드
@@ -196,9 +196,10 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | --- | --- | --- |
 | `AI_MODE` | `stub` | `stub` 가짜 응답 / `real` 실제 모델 |
 | `AWS_REGION` | `ap-northeast-2` | Bedrock 리전 (서울) |
-| `AWS_BEARER_TOKEN_BEDROCK` | (없음) | Bedrock API 키. real 모드에 필요. 커밋·공유 금지 |
-| `LLM_MODEL` | `deepseek.v3-v1:0` | Bedrock LLM 모델 ID이자 응답의 `model` 값 |
+| `AWS_BEARER_TOKEN_BEDROCK` | (없음) | Bedrock API 키. LLM·임베딩 모두 이 키를 씀. 커밋·공유 금지 |
+| `LLM_MODEL` | `global.amazon.nova-2-lite-v1:0` | Bedrock 모델(추론 프로필) ID이자 응답의 `model` 값 |
 | `LLM_TIMEOUT` | `60` | LLM 읽기 제한(초) |
+| `LLM_MAX_ATTEMPTS` | `1` | LLM 호출 시도 횟수. 운영은 1(재시도는 BE가 함). 평가 스크립트로 몰아서 부를 때만 올린다 |
 | `LLM_MAX_MODEL_LEN` | `128000` | 입력+출력 토큰 한도 (모델 문맥 길이) |
 | `LLM_TEMPERATURE` | `0.7` | 생성 온도. P2(`/requirements/extract`)는 추출이라 이 값과 상관없이 0 |
 | `EMBED_MODEL_ID` | `amazon.titan-embed-text-v2:0` | 임베딩 모델 (바꾸지 않음, 바꾸면 전체 재임베딩) |

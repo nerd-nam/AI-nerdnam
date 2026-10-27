@@ -7,7 +7,7 @@ services:
       AI_MODE: real
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
       AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:?Bedrock API 키 필요}
-      LLM_MODEL: ${LLM_MODEL:-deepseek.v3-v1:0}
+      LLM_MODEL: ${LLM_MODEL:-global.amazon.nova-2-lite-v1:0}
     ports:
       - "8000:8000"                          # BE만 접근: 보안 그룹에서 API 서버 IP만 허용
     restart: unless-stopped
