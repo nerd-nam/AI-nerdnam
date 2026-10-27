@@ -34,17 +34,6 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 - API 문서(Swagger): http://localhost:8000/docs
 - 상태 확인: `curl localhost:8000/health` → `{"status":"ok","models":{"llm":"stub","embedding":"stub"}}`
 
-**Docker로 (uv·Python 설치 없이, 팀원 로컬 연동 테스트용)**
-
-```bash
-docker compose -f docker-compose.local.yml up -d --build   # stub 모드, 모델 의존성 없는 이미지(약 330MB)
-docker compose -f docker-compose.local.yml down            # 끄기
-```
-
-- 포트를 바꾸려면 `AI_PORT=8010 docker compose -f docker-compose.local.yml up -d`
-- BE(Docker)에서 붙이기: BE `.env`에 `NERDNAM_AI_STUB=false`, `NERDNAM_AI_BASE_URL=http://host.docker.internal:8000`. Linux에서는 `AI_BIND=0.0.0.0`으로 띄워야 BE 컨테이너가 붙습니다.
-- 실제 모델은 Docker에서 Mac GPU를 쓸 수 없어 CPU로만 돌아 매우 느립니다. 실제 모델 확인은 [A. 로컬 Mac](#a-로컬-mac)으로 띄우세요.
-
 ## 엔드포인트
 
 | 엔드포인트 | 하는 일 | 프롬프트 | 쓰는 화면 |
@@ -236,7 +225,6 @@ AI-nerdnam/
 ├── tests/                    pytest
 ├── scripts/export_contract.py   schemas.py → SPEC 계약 파일 내보내기
 ├── Dockerfile, docker-compose.yml   GPU 서버 한 대 실행 설정
-├── docker-compose.local.yml  로컬 연동 테스트 (stub, GPU 없음)
 ├── .env.local.example        로컬 Mac real 모드 설정 예시
 └── pyproject.toml, uv.lock
 ```
