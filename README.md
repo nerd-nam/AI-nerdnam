@@ -50,7 +50,7 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 
 - 생성 응답에는 `model`·`prompt_version`이, `/embed` 응답에는 `embedding_model`이 들어 있습니다. 값이 `"stub"`이면 가짜 응답이니 API 서버는 저장하지 않습니다.
 - 생성 응답에는 `usage`(`input_tokens`·`output_tokens`·`llm_calls`)도 있습니다. 요청 1건이 쓴 LLM 토큰 합계로, 형식 오류 재요청·요건별 호출을 모두 더한 값입니다. AI 서버가 낸 502·503·504와 `/guide` 문맥 초과 422도 `{detail, usage}`로 실패 전까지 쓴 토큰을 돌려줍니다. API 서버는 이 값을 AI 호출 기록에 저장합니다. 가짜 응답은 0입니다.
-- AI 서버는 LLM 호출마다 로그를 한 줄 남깁니다: `bedrock llm <모델> <초> ok in=<입력 토큰> out=<출력 토큰>` (실패면 오류 코드). 본문·키는 남기지 않습니다.
+- AI 서버는 LLM 호출마다 로그를 한 줄 남깁니다: `bedrock llm <모델> <초> ok in=<입력 토큰> out=<출력 토큰>` (실패면 오류 코드). 본문·키는 남기지 않습니다. 이 로그는 표준 출력으로만 나가고 AI 서버는 저장하지 않습니다(토큰 기록 저장은 API 서버 몫).
 - 오류 응답
 
   | 상태 코드 | 뜻 | API 서버 처리 |
