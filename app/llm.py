@@ -4,7 +4,9 @@ LLM(Converse)·임베딩(InvokeModel, app/embedding.py) 모두 boto3로 bedrock-
 인증은 boto3 기본 순서: 환경변수 AWS_BEARER_TOKEN_BEDROCK(Bedrock API 키) → IAM 자격 증명(운영 Pod 역할 등)."""
 import asyncio
 import json
+import logging
 import os
+import time
 
 import boto3
 from botocore.config import Config
@@ -19,6 +21,7 @@ from botocore.exceptions import (
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
 
+from app import state
 from app.config import AWS_REGION, LLM_MAX_MODEL_LEN, LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT
 
 # 재시도는 BE가 1회 한다(C-04). boto3 기본 재시도(최대 5회)를 두면 BE 읽기 제한을 넘긴다.
@@ -32,6 +35,7 @@ ERRORS = (ClientError, BotoCoreError)
 _RETRYABLE = {"ThrottlingException", "ServiceUnavailableException", "InternalServerException",
               "ModelNotReadyException", "ServiceQuotaExceededException", "ModelErrorException"}
 _UNREACHABLE = (EndpointConnectionError, ConnectTimeoutError, ConnectionClosedError)
+log = logging.getLogger("uvicorn.error")
 
 
 def http_error(e: Exception) -> HTTPException:
@@ -82,7 +86,21 @@ def _request(messages: list[dict], schema: dict | None, max_tokens: int, tempera
 
 
 async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048, temperature: float | None = None) -> str:
-    r = await asyncio.to_thread(client.converse, **_request(messages, schema, max_tokens, temperature))
+    t, used = time.monotonic(), state.usage.get()
+    if used is not None:
+        used["llm_calls"] += 1
+    try:
+        r = await asyncio.to_thread(client.converse, **_request(messages, schema, max_tokens, temperature))
+    except ERRORS as e:
+        code = e.response.get("Error", {}).get("Code") if isinstance(e, ClientError) else type(e).__name__
+        log.warning("bedrock llm %s %.1fs %s", LLM_MODEL, time.monotonic() - t, code)
+        raise
+    # 호출마다 한 줄 (본문·키는 남기지 않음). 읽기 시간 초과로 끊긴 호출의 토큰은 알 수 없어 합계에 빠진다
+    u = r.get("usage", {})
+    if used is not None:
+        used["input_tokens"] += u.get("inputTokens", 0)
+        used["output_tokens"] += u.get("outputTokens", 0)
+    log.info("bedrock llm %s %.1fs ok in=%s out=%s", LLM_MODEL, time.monotonic() - t, u.get("inputTokens"), u.get("outputTokens"))
     blocks = r["output"]["message"]["content"]
     if schema:  # 도구 입력이 곧 출력 JSON. 도구 호출이 없으면(길이 초과 등) "" → 검증 실패로 1회 재시도
         return next((json.dumps(b["toolUse"]["input"], ensure_ascii=False) for b in blocks if "toolUse" in b), "")
