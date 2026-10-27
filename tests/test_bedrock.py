@@ -91,3 +91,35 @@ def test_titan_request(monkeypatch):
     assert len(embedding.encode("document", [("본문", "제목")])[0]) == 1024
     assert sent["modelId"] == "amazon.titan-embed-text-v2:0"
     assert json.loads(sent["body"]) == {"inputText": "제목\n본문", "dimensions": 1024, "normalize": True}
+
+
+def test_usage_summed_per_request(monkeypatch):
+    # 요건 2개를 동시에 판정 → 두 호출의 토큰이 응답 usage에 합쳐진다. 다음 요청은 0부터
+    monkeypatch.setitem(state.models, "llm", "ready")
+
+    def converse(**req):
+        return {"output": {"message": {"content": [{"toolUse": {"name": "out", "input": {
+            "verdict": "unmet", "evidence_chunk_ids": [], "reason": "관련 경험 없음"}}}]}},
+            "usage": {"inputTokens": 100, "outputTokens": 7}}
+    monkeypatch.setattr(llm.client, "converse", converse)
+    sk = {"chunk_id": 1, "chunk_type": "skill", "text": "Kafka"}
+    req = {"requirements": [{"id": i, "type": "required", "text": "Go", "candidates": [sk]} for i in (1, 2)]}
+    assert c.post("/match", json=req).json()["usage"] == {"input_tokens": 200, "output_tokens": 14, "llm_calls": 2}
+    assert c.post("/match", json={"requirements": req["requirements"][:1]}).json()["usage"]["llm_calls"] == 1
+
+
+def test_error_response_has_usage(monkeypatch):
+    # 형식 오류 2번 → 502여도 쓴 토큰은 돌려준다 (BE가 실패 호출 비용도 기록)
+    monkeypatch.setitem(state.models, "llm", "ready")
+    monkeypatch.setattr(llm.client, "converse", lambda **req: {
+        "output": {"message": {"content": [{"toolUse": {"name": "out", "input": {"verdict": "?"}}}]}},
+        "usage": {"inputTokens": 50, "outputTokens": 5}})
+    sk = {"chunk_id": 1, "chunk_type": "skill", "text": "Kafka"}
+    r = c.post("/match", json={"requirements": [{"id": 1, "type": "required", "text": "Go", "candidates": [sk]}]})
+    assert r.status_code == 502
+    assert r.json() == {"detail": "llm output invalid", "usage": {"input_tokens": 100, "output_tokens": 10, "llm_calls": 2}}
+
+
+def test_stub_usage_zero():
+    r = c.post("/match", json={"requirements": [{"id": 1, "type": "required", "text": "Go", "candidates": []}]}).json()
+    assert r["usage"] == {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0}

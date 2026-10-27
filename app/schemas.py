@@ -3,16 +3,36 @@
 ID(요건·청크)는 BE DB의 숫자 ID다."""
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app import state
 
 ReqType = Literal["required", "preferred"]
 ChunkType = Literal["skill", "career", "project_summary", "episode"]  # 기획서 4.4
 Verdict = Literal["met", "partial", "unmet"]  # D-10 임시값
 
 
+class Usage(BaseModel):
+    """요청 1건이 쓴 LLM 토큰 합계 (형식 오류 재요청·요건별 호출 포함). 비용·호출량 관측용, BE는 ai_call_log에 저장"""
+    input_tokens: int
+    output_tokens: int
+    llm_calls: int  # Bedrock LLM 호출 횟수 (실패한 호출 포함). 가짜 응답이면 0
+
+
 class Meta(BaseModel):
+    # usage는 서버가 채우는 값이라 기본값이 있지만 응답에는 항상 있다 → 계약에서도 필수로 표시
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
     model: str
     prompt_version: str  # 가짜 응답이면 "stub"
+    usage: Usage = Field(default_factory=lambda: Usage(**state.current_usage()))  # 응답을 만들 때 그 요청의 합계를 담는다
+
+
+class ErrorResponse(BaseModel):
+    """AI 서버가 낸 오류(502·503·504, /guide 문맥 초과 422). 실패하기 전까지 쓴 토큰도 usage에 담는다.
+    요청 형식 검사 422는 FastAPI 기본 응답(detail 목록, usage 없음)"""
+    detail: str
+    usage: Usage
 
 
 class Candidate(BaseModel):
