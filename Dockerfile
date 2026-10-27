@@ -6,7 +6,9 @@ WORKDIR /app
 
 # 의존성 먼저 (코드만 바뀌면 이 층은 캐시 재사용)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra model --no-install-project
+# 로컬 stub 이미지는 EXTRAS="" 로 모델 의존성(torch 등 수 GB)을 빼고 만든다 (docker-compose.local.yml)
+ARG EXTRAS="--extra model"
+RUN uv sync --frozen --no-dev ${EXTRAS} --no-install-project
 
 COPY app ./app
 EXPOSE 8000
