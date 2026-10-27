@@ -36,29 +36,73 @@ def test_strict_schema_requires_defaulted_fields():
 
 
 def test_match_filters_ids_and_forces_unmet(llm_replies):
-    def reply(messages):  # 다시 요청해도 같은 답 → 코드가 정리
-        if '"id": 14' in messages[1]["content"]:
-            return {"verdict": "met", "evidence_chunk_ids": [531, 999, 531], "reason": "Kafka 비동기 분리 경험"}  # 999는 후보 밖
-        return {"verdict": "partial", "evidence_chunk_ids": [], "reason": "관련 없음"}  # 근거 없는 부분 충족
-    calls = llm_replies(reply)
+    out = {"results": [
+        {"id": 14, "verdict": "met", "evidence_chunk_ids": [531, 999, 531], "reason": "Kafka 비동기 분리 경험"},  # 999는 후보 밖
+        {"id": 16, "verdict": "partial", "evidence_chunk_ids": [], "reason": "관련 없음"},  # 근거 없는 부분 충족
+        {"id": 77, "verdict": "met", "evidence_chunk_ids": [531], "reason": "x"},  # 입력에 없는 요건
+    ]}
+    calls = llm_replies(out, out)  # 다시 요청해도 같은 답 → 코드가 정리
     req = {"requirements": [
         {"id": 14, "type": "preferred", "text": "Kafka 운영", "candidates": [EP, SK]},
         {"id": 16, "type": "preferred", "text": "Kubernetes 운영", "candidates": [SK]},
-        {"id": 17, "type": "preferred", "text": "iOS", "candidates": []},  # 후보 없음 → 모델 안 부름
+        {"id": 17, "type": "preferred", "text": "iOS", "candidates": []},  # 후보 없음 → 모델에 안 보냄
     ]}
     r = c.post("/match", json=req).json()
-    assert r["prompt_version"] == "p3_v2"
+    assert r["prompt_version"] == "p3_v4"
     got = {x["id"]: (x["verdict"], x["evidence_chunk_ids"]) for x in r["results"]}
     assert got == {14: ("met", [531]), 16: ("unmet", []), 17: ("unmet", [])}
-    assert len(calls) == 4  # 14·16 각각 1회 다시 요청, 17은 모델을 부르지 않음
+    assert [x["id"] for x in r["results"]] == [14, 16, 17]  # 입력 순서
+    assert len(calls) == 2  # 요건 14·16을 한 번에, 문제가 있어 1회 다시 요청
+    sent = json.loads(calls[0][0][1]["content"])
+    assert [x["chunk_id"] for x in sent["candidates"]] == [531, 506]  # SK는 두 요건이 같이 써도 한 번만
+    assert [(x["id"], x["candidate_ids"]) for x in sent["requirements"]] == [(14, [531, 506]), (16, [506])]
 
 
 def test_match_retries_on_made_up_number(llm_replies):
-    calls = llm_replies({"verdict": "met", "evidence_chunk_ids": [531], "reason": "응답 75% 단축"},
-                        {"verdict": "met", "evidence_chunk_ids": [531], "reason": "응답 1.2초 → 0.3초"})
+    calls = llm_replies({"results": [{"id": 13, "verdict": "met", "evidence_chunk_ids": [531], "reason": "응답 75% 단축"}]},
+                        {"results": [{"id": 13, "verdict": "met", "evidence_chunk_ids": [531], "reason": "응답 1.2초 → 0.3초"}]})
     req = {"requirements": [{"id": 13, "type": "required", "text": "대용량 트래픽", "candidates": [EP]}]}
     assert c.post("/match", json=req).json()["results"][0]["reason"] == "응답 1.2초 → 0.3초"
     assert len(calls) == 2 and "75" in calls[1][0][-1]["content"]
+
+
+def test_match_learning_skill_is_partial(llm_replies):
+    # ADR-0006 B10: 기술 목록에 학습 중뿐이면 모델이 unmet이라 해도 partial. 이름이 다르거나 실무 숙련도면 그대로 unmet
+    go = {"chunk_id": 7, "chunk_type": "skill", "text": "Go · language · 학습 중"}
+    pg = {"chunk_id": 8, "chunk_type": "skill", "text": "PostgreSQL · database · 공부했거나 개인 프로젝트에서 써 봤다"}
+    rd = {"chunk_id": 9, "chunk_type": "skill", "text": "Redis · database · 실무 사용"}
+    llm_replies(lambda messages: {"results": [
+        {"id": i, "verdict": "unmet", "evidence_chunk_ids": [], "reason": "경험 없음"} for i in (1, 2, 3, 4)]})
+    req = {"requirements": [
+        {"id": 1, "type": "required", "text": "Go 언어로 운영 도구를 개발한 경험", "candidates": [go]},
+        {"id": 2, "type": "required", "text": "RDB 경험", "skills": ["PostgreSQL"], "candidates": [pg]},
+        {"id": 3, "type": "required", "text": "Google Cloud 경험", "candidates": [go]},  # Go ≠ Google
+        {"id": 4, "type": "required", "text": "Redis 운영", "candidates": [rd]},
+    ]}
+    r = c.post("/match", json=req).json()["results"]
+    got = {x["id"]: (x["verdict"], x["evidence_chunk_ids"]) for x in r}
+    assert got == {1: ("partial", [7]), 2: ("partial", [8]), 3: ("unmet", []), 4: ("unmet", [])}
+    assert "보완" in r[0]["reason"]
+
+
+def test_match_batches_and_fills_missing(llm_replies):
+    # 요건 15개 → 10개·5개 두 묶음. 묶음 응답에서 끝내 빠진 요건(15)은 혼자 다시 부른다
+    def reply(messages):
+        ids = [x["id"] for x in json.loads(messages[1]["content"])["requirements"]]
+        keep = ids if ids == [15] else [i for i in ids if i != 15]
+        return {"results": [{"id": i, "verdict": "met", "evidence_chunk_ids": [531], "reason": "결제 경험"} for i in keep]}
+    calls = llm_replies(reply)
+    req = {"requirements": [{"id": i, "type": "required", "text": "결제", "candidates": [EP]} for i in range(1, 16)]}
+    r = c.post("/match", json=req).json()
+    assert [x["verdict"] for x in r["results"]] == ["met"] * 15
+    sizes = [len(json.loads(m[1]["content"])["requirements"]) for m, _ in calls]
+    assert sorted(sizes) == [1, 5, 5, 10]  # 10·5 묶음, 5개 묶음은 15가 빠져 1회 다시 요청, 그 뒤 15 혼자
+
+
+def test_match_missing_after_fallback_is_502(llm_replies):
+    llm_replies(lambda messages: {"results": []})  # 몇 번을 다시 불러도 빈 결과
+    req = {"requirements": [{"id": 1, "type": "required", "text": "결제", "candidates": [EP]}]}
+    assert c.post("/match", json=req).status_code == 502
 
 
 def test_gap_guide_filters_citations(llm_replies):
