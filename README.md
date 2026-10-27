@@ -210,7 +210,7 @@ AI-nerdnam/
 │   │   ├── match.py          /match
 │   │   ├── gap_guide.py      /gap-guide
 │   │   └── guide.py          /guide
-│   └── prompts/              프롬프트 (p1_v2.md = P1 버전 2)
+│   └── prompts/              프롬프트 (p1_v3.md = P1 버전 3)
 ├── evals/                    평가·확인 도구
 │   ├── embed_eval.py         임베딩 검색 품질 (약어 확장어 비교 포함)
 │   ├── extract_eval.py       P2 약어 확장어 확인 (extract_cases.json)

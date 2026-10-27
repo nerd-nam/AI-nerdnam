@@ -41,7 +41,7 @@ def test_spans_from_quotes_and_skills_filtered(llm_replies):
     llm_replies(draft("평균 응답 1.2초 → 0.3초", [Q2, Q1], skills=("Redis", "Kafka", "Kubernetes")))
     r = c.post("/restructure", json={"mode": "initial", "source_text": RAW, "skills": ["Redis"]}).json()
     ep = r["episodes"][0]
-    assert r["prompt_version"] == "p1_v2"
+    assert r["prompt_version"] == "p1_v3"
     assert ep["source_spans"] == [[RAW.find(Q1), RAW.find(Q1) + len(Q1)], [RAW.find(Q2), RAW.find(Q2) + len(Q2)]]
     assert ep["skills"] == ["Redis", "Kafka"]  # Kubernetes는 입력·원문에 없어 제거
     assert ep["clarifications"] == []
@@ -97,12 +97,44 @@ def test_spaced_quote_and_metric_source(llm_replies):
     assert ep["metrics"][0]["source"] == "raw_text"
 
 
+def with_metrics(*metrics, title="결제 승인 응답 지연 개선"):
+    out = json.loads(draft("평균 응답 0.3초", [Q2]))
+    out["episodes"][0].update(title=title, metrics=[dict(zip(("name", "before", "after", "source"), m)) for m in metrics])
+    return json.dumps(out, ensure_ascii=False)
+
+
+def test_metric_value_kept_without_retry(llm_replies):
+    calls = llm_replies(with_metrics(("평균 응답", "1.2초", "0.3초", "raw_text")))
+    ep = c.post("/restructure", json={"mode": "initial", "source_text": RAW}).json()["episodes"][0]
+    assert len(calls) == 1
+    assert ep["metrics"] == [{"name": "평균 응답", "before": "1.2초", "after": "0.3초", "source": "raw_text"}]
+
+
+def test_json_like_metric_retried_then_dropped(llm_replies):
+    # 로컬 테스트(AI #24): 출처 이름을 값 칸에 JSON 모양으로 넣음 — 20은 원문에 있어 수치 검사는 통과했다
+    bad = with_metrics(("평균 응답", None, '{ "raw_text": "0.3 초", "answer": null }', "raw_text"),
+                       ("평균 응답 (전)", None, "개선됨", "raw_text"))
+    calls = llm_replies(bad, bad)
+    ep = c.post("/restructure", json={"mode": "initial", "source_text": RAW}).json()["episodes"][0]
+    assert len(calls) == 2 and "3.2초" in calls[1][-1]["content"]  # 값 모양을 알려 주며 1회 다시 요청
+    assert ep["metrics"] == []  # 그래도 남으면 표에서 뺀다
+
+
+def test_foreign_han_retried_then_asked(llm_replies):
+    bad = with_metrics(title="결제 승인 고可用性 확보")
+    calls = llm_replies(bad, bad)
+    ep = c.post("/restructure", json={"mode": "initial", "source_text": RAW}).json()["episodes"][0]
+    assert len(calls) == 2 and "可用性" in calls[1][-1]["content"]
+    assert ep["clarifications"][0]["field"] == "title" and "可用性" in ep["clarifications"][0]["question"]
+
+
 def test_llm_schema_requires_all_fields():
     # 기본값이 있으면 JSON 스키마에서 생략 가능이 되어 모델이 role·skills·수치 값을 건너뛴다 (로컬 테스트)
     from app.routers.restructure import P1Out
     defs = P1Out.model_json_schema()["$defs"]
     assert set(defs["Draft"]["required"]) == set(defs["Draft"]["properties"])
     assert set(defs["DraftMetric"]["required"]) == {"name", "before", "after", "source"}
+    assert defs["DraftMetric"]["properties"]["after"]["type"] == "string"  # null 불가: 값 없는 성과 항목 금지 (AI #24)
     assert set(defs["DraftQuestion"]["required"]) == {"field", "question", "example"}
 
 
