@@ -30,6 +30,14 @@ client = boto3.client("bedrock-runtime", region_name=AWS_REGION, config=Config(
     read_timeout=LLM_TIMEOUT, connect_timeout=2, max_pool_connections=32,
     retries={"mode": "adaptive", "total_max_attempts": int(os.getenv("LLM_MAX_ATTEMPTS", "1"))}))
 
+# 서버 전체 LLM 동시 호출 상한 (#37). 운영은 replica 1이라 프로세스 상한이 곧 전체 상한. 모든 LLM 호출이 chat()을 지난다
+# ponytail: 동시 8건 고정. 호출 한도에 걸리면 줄이고, 처리량이 모자라면 한도 상향 요청
+LLM_CONCURRENCY = int(os.getenv("LLM_CONCURRENCY", "8"))
+LLM_QUEUE = int(os.getenv("LLM_QUEUE", "32"))  # 자리를 기다리는 호출 수 상한. 넘치면 바로 503
+LLM_QUEUE_WAIT = float(os.getenv("LLM_QUEUE_WAIT", "5"))  # 기다리는 시간 상한(초). 가장 짧은 읽기 제한 20초(/extract·/gap-guide) 안
+_slots = asyncio.Semaphore(LLM_CONCURRENCY)
+_waiting = 0
+
 ERRORS = (ClientError, BotoCoreError)
 # 잠시 뒤 다시 하면 되는 실패 → 503 (API는 GPU_UNAVAILABLE, 1회 재시도)
 _RETRYABLE = {"ThrottlingException", "ServiceUnavailableException", "InternalServerException",
@@ -85,7 +93,26 @@ def _request(messages: list[dict], schema: dict | None, max_tokens: int, tempera
     return req
 
 
+async def _acquire() -> float:
+    """동시 호출 자리를 얻고 기다린 초를 돌려준다. 대기열이 차 있거나 오래 기다리면 503 (API는 GPU_UNAVAILABLE, 1회 재시도)"""
+    global _waiting
+    if _waiting >= LLM_QUEUE:
+        log.warning("bedrock llm busy queue=%d", _waiting)
+        raise HTTPException(503, "bedrock busy")
+    t = time.monotonic()
+    _waiting += 1
+    try:
+        await asyncio.wait_for(_slots.acquire(), LLM_QUEUE_WAIT)
+    except TimeoutError:
+        log.warning("bedrock llm busy wait=%.1fs", time.monotonic() - t)
+        raise HTTPException(503, "bedrock busy")
+    finally:
+        _waiting -= 1
+    return time.monotonic() - t
+
+
 async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048, temperature: float | None = None) -> str:
+    wait = await _acquire()
     t, used = time.monotonic(), state.usage.get()
     if used is not None:
         used["llm_calls"] += 1
@@ -93,14 +120,17 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
         r = await asyncio.to_thread(client.converse, **_request(messages, schema, max_tokens, temperature))
     except ERRORS as e:
         code = e.response.get("Error", {}).get("Code") if isinstance(e, ClientError) else type(e).__name__
-        log.warning("bedrock llm %s %.1fs %s", LLM_MODEL, time.monotonic() - t, code)
+        log.warning("bedrock llm %s %.1fs wait=%.1fs %s", LLM_MODEL, time.monotonic() - t, wait, code)
         raise
+    finally:
+        _slots.release()
     # 호출마다 한 줄 (본문·키는 남기지 않음). 읽기 시간 초과로 끊긴 호출의 토큰은 알 수 없어 합계에 빠진다
     u = r.get("usage", {})
     if used is not None:
         used["input_tokens"] += u.get("inputTokens", 0)
         used["output_tokens"] += u.get("outputTokens", 0)
-    log.info("bedrock llm %s %.1fs ok in=%s out=%s", LLM_MODEL, time.monotonic() - t, u.get("inputTokens"), u.get("outputTokens"))
+    log.info("bedrock llm %s %.1fs wait=%.1fs retries=%s ok in=%s out=%s", LLM_MODEL, time.monotonic() - t, wait,
+             r.get("ResponseMetadata", {}).get("RetryAttempts", 0), u.get("inputTokens"), u.get("outputTokens"))
     blocks = r["output"]["message"]["content"]
     if schema:  # 도구 입력이 곧 출력 JSON. 도구 호출이 없으면(길이 초과 등) "" → 검증 실패로 1회 재시도
         return next((json.dumps(b["toolUse"]["input"], ensure_ascii=False) for b in blocks if "toolUse" in b), "")
