@@ -86,3 +86,17 @@ async def error_with_usage(request: Request, e: HTTPException):
 def health():
     # 예: {"status": "ok", "models": {"llm": "ready", "embedding": "ready"}}
     return {"status": "ok", "models": state.models}
+
+
+# k8s 프로브용 (계약 C-04 밖이라 OpenAPI에 넣지 않음). 저장된 상태만 읽고 Bedrock은 부르지 않는다(유료·호출 한도)
+@app.get("/livez", include_in_schema=False)
+def livez():
+    return {"status": "ok"}
+
+
+@app.get("/readyz", include_in_schema=False)
+def readyz():
+    # 첫 연결 확인이 끝났고(loading 없음) 한쪽이라도 쓸 수 있으면 트래픽을 받는다. 한쪽만 error면 그 기능만 503
+    # (warmup이 모델별로 상태를 두는 이유. 둘 다 요구하면 Pod가 빠져 BE가 /health로 임베딩 ready도 못 본다)
+    ok = "loading" not in state.models.values() and any(v in ("ready", "stub") for v in state.models.values())
+    return JSONResponse({"status": "ok" if ok else "not ready", "models": state.models}, status_code=200 if ok else 503)
