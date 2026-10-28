@@ -1,5 +1,7 @@
 """Bedrock 전환 (ADR-0007): 출력 스키마 규칙, boto3 오류 → 계약 코드(C-04), /embed 순서·차원"""
+import asyncio
 import json
+import time
 
 import pytest
 from botocore.exceptions import (
@@ -126,3 +128,32 @@ def test_error_response_has_usage(monkeypatch):
 def test_stub_usage_zero():
     r = c.post("/match", json={"requirements": [{"id": 1, "type": "required", "text": "Go", "candidates": []}]}).json()
     assert r["usage"] == {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0}
+
+
+def test_llm_busy_is_503(monkeypatch):
+    # 전역 동시 호출 상한 (#37): 대기열이 차 있거나 자리를 오래 못 얻으면 Bedrock을 부르지 않고 503
+    monkeypatch.setitem(state.models, "llm", "ready")
+    monkeypatch.setattr(llm.client, "converse", lambda **req: pytest.fail("호출하면 안 됨"))
+    req = {"requirements": [{"id": 1, "type": "required", "text": "Go", "candidates": [{"chunk_id": 1, "chunk_type": "skill", "text": "Go"}]}]}
+    monkeypatch.setattr(llm, "_waiting", llm.LLM_QUEUE)
+    assert c.post("/match", json=req).status_code == 503
+    monkeypatch.setattr(llm, "_waiting", 0)
+    monkeypatch.setattr(llm, "_slots", asyncio.Semaphore(0))  # 자리가 안 남
+    monkeypatch.setattr(llm, "LLM_QUEUE_WAIT", 0.05)
+    r = c.post("/match", json=req)
+    assert r.status_code == 503 and r.json()["usage"]["llm_calls"] == 0 and llm._waiting == 0
+
+
+def test_embed_busy_is_503(monkeypatch):
+    monkeypatch.setitem(state.models, "embedding", "ready")
+    monkeypatch.setattr(embedding, "_pending", embedding.EMBED_QUEUE)  # 이미 밀려 있음
+    assert c.post("/embed", json={"purpose": "query", "items": [{"text": "a"}]}).status_code == 503
+
+
+def test_embed_over_budget_is_503(monkeypatch):
+    monkeypatch.setitem(state.models, "embedding", "ready")
+    monkeypatch.setattr(embedding, "BUDGET", 0.05)
+    monkeypatch.setattr(embedding, "_one", lambda text: time.sleep(0.3) or [0.0] * embedding.EMBED_DIM)
+    assert c.post("/embed", json={"purpose": "query", "items": [{"text": "a"}] * 20}).status_code == 503
+    time.sleep(0.4)  # 이미 시작한 호출이 끝나면 밀린 수가 0으로 돌아온다 (취소된 것 포함)
+    assert embedding._pending == 0

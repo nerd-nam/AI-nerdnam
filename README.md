@@ -216,6 +216,13 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | `LLM_MAX_MODEL_LEN` | `128000` | 입력+출력 토큰 한도 (모델 문맥 길이) |
 | `LLM_TEMPERATURE` | `0.7` | 생성 온도. P2(`/requirements/extract`)는 추출이라 이 값과 상관없이 0 |
 | `EMBED_MODEL_ID` | `amazon.titan-embed-text-v2:0` | 임베딩 모델 (바꾸지 않음, 바꾸면 전체 재임베딩) |
+| `LLM_CONCURRENCY` | `8` | 서버 전체 LLM 동시 호출 상한 (replica 1이라 곧 전체 상한) |
+| `LLM_QUEUE` | `32` | 자리를 기다리는 LLM 호출 수 상한. 넘치면 바로 503 `bedrock busy` |
+| `LLM_QUEUE_WAIT` | `5` | LLM 호출이 자리를 기다리는 시간 상한(초). 넘으면 503 |
+| `EMBED_QUEUE` | `64` | 이미 밀린 임베딩 문장 수가 이만큼이면 새 `/embed`는 바로 503. 동시 호출은 8건 고정 |
+| `EMBED_BUDGET` | `8` | `/embed` 1건이 재시도까지 쓰는 시간 상한(초). BE 읽기 제한 10초 안 |
+
+503 `bedrock busy`는 API가 `GPU_UNAVAILABLE`로 1회 재시도합니다. 호출마다 로그 한 줄에 걸린 시간·대기(`wait`)·재시도 수(`retries`)·오류 코드(예: `ThrottlingException`)를 남깁니다.
 
 ## 관련 문서
 
