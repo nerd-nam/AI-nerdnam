@@ -128,7 +128,9 @@ uv run python evals/smoke_report.py ../SPEC-nerdnam/fixtures                    
 - BE가 Docker 안에 있으면 AI 서버 주소는 `http://host.docker.internal:8000`입니다.
 - 호출할 때마다 Bedrock 요금이 나갑니다(토큰 단위). 평가를 반복해서 돌릴 때 참고하세요.
 
-운영은 EKS에서 GPU 없이 일반 Pod로 돌립니다. 배포 설정은 `nerdnam-infra` 레포의 `apps/ai/`에 있고, 키는 Secret으로 넣습니다.
+운영은 EKS에서 GPU 없이 일반 Pod로 돌립니다. 배포 설정은 `nerdnam-infra` 레포의 `apps/ai/`에 있습니다. 운영에서는 Bedrock API 키를 쓰지 않고 EKS Pod Identity 역할로 호출합니다(boto3 기본 인증 순서). 역할은 Titan 임베딩 V2(서울)와 Nova 2 Lite Global 프로필만 허용하므로 `LLM_MODEL`·`EMBED_MODEL_ID`를 바꾸면 인프라 IAM도 함께 바꿔야 합니다. `docker-compose.yml`의 API 키 필수 규칙은 로컬용입니다.
+
+`main`에 머지되면 GitHub Actions(`.github/workflows/ci.yml`)가 테스트 → 이미지 빌드 → ECR `nerdnam-dev/ai:<commit SHA>` push를 합니다. 인증은 GitHub OIDC 역할이고, 저장소 변수 `AWS_CI_ROLE_ARN`이 비어 있으면 push 단계는 건너뜁니다. push한 이미지의 digest는 실행 요약에 남습니다.
 
 ## 테스트와 평가
 
