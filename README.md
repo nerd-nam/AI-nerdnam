@@ -81,6 +81,13 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
 
 API 서버는 `embedding`이 `ready`일 때 "임베딩 대기" 청크를 다시 처리합니다. `llm`이 준비되지 않았는데 생성 요청이 오면 AI 서버가 503을 돌려줍니다.
 
+Kubernetes 프로브는 계약(C-04) 밖의 두 주소를 씁니다. 둘 다 저장된 상태만 읽고 Bedrock을 부르지 않습니다.
+
+| 주소 | 용도 | 응답 |
+| --- | --- | --- |
+| `GET /livez` | liveness | 프로세스가 살아 있으면 항상 200 |
+| `GET /readyz` | readiness | 첫 연결 확인이 끝났고(`loading` 없음) LLM·임베딩 중 하나라도 `ready`(또는 `stub`)면 200, 아니면 503. 한쪽만 `error`면 Pod는 트래픽을 받고 그 기능 요청만 503 |
+
 ### 사용하는 모델
 
 | 모델 | 용도 | 어디서 돌아가나 |

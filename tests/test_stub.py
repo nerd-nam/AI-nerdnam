@@ -11,6 +11,23 @@ def test_health():
     assert c.get("/health").json() == {"status": "ok", "models": {"llm": "stub", "embedding": "stub"}}
 
 
+@pytest.mark.parametrize("llm,emb,code", [
+    ("stub", "stub", 200),
+    ("ready", "ready", 200),
+    ("loading", "ready", 503),  # 첫 연결 확인 중
+    ("error", "error", 503),
+    ("ready", "error", 200),  # 한쪽만 쓸 수 있어도 받는다. 임베딩 요청만 503
+    ("error", "ready", 200),
+])
+def test_probes(monkeypatch, llm, emb, code):
+    monkeypatch.setattr("app.state.models", {"llm": llm, "embedding": emb})
+    assert c.get("/livez").status_code == 200
+    r = c.get("/readyz")
+    assert r.status_code == code and r.json()["models"] == {"llm": llm, "embedding": emb}
+    assert c.get("/health").status_code == 200  # 계약 응답은 그대로
+    assert "/readyz" not in app.openapi()["paths"]  # 계약(C-04) 파일 변화 없음
+
+
 def test_restructure():
     raw = "결제 API 개선"
     r = c.post("/restructure", json={"mode": "initial", "source_text": raw}).json()
