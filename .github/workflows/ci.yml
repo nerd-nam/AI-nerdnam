@@ -1,0 +1,33 @@
+# main 머지 때 테스트 → 이미지 빌드 → ECR(nerdnam-dev/ai) push (#36)
+# Bedrock 실호출 평가(evals/)는 비용·호출 한도 때문에 여기서 돌리지 않는다
+name: ci
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {version: "0.13.5"}
+      - run: uv sync --frozen && uv run pytest  # stub 모드, Bedrock 호출 없음
+
+  image:
+    needs: test
+    # 역할 ARN(INFRA terraform output workload.ci_role_arns.ai)을 저장소 변수 AWS_CI_ROLE_ARN에 넣기 전까지는 건너뜀
+    if: vars.AWS_CI_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    permissions: {id-token: write, contents: read}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: {role-to-assume: "${{ vars.AWS_CI_ROLE_ARN }}", aws-region: ap-northeast-2}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      # 태그는 commit SHA (ECR IMMUTABLE). 배포 정의(INFRA gitops/apps/images.yaml)에는 아래 digest를 넣는다
+      - run: |
+          ref=${{ steps.ecr.outputs.registry }}/nerdnam-dev/ai:${GITHUB_SHA}
+          docker build -t "$ref" . && docker push "$ref"
+          docker inspect --format '{{index .RepoDigests 0}}' "$ref" | tee -a "$GITHUB_STEP_SUMMARY"
