@@ -109,6 +109,8 @@ Docker로 띄울 때:
 AWS_BEARER_TOKEN_BEDROCK=... docker compose up -d --build
 ```
 
+이미지는 uid 65532(비root)로 실행되고 `/tmp` 말고는 쓰지 않아 읽기 전용 root에서도 뜹니다. 종료 신호를 받으면 진행 중 요청을 최대 300초 기다립니다.
+
 흐름 확인(선택) — SPEC의 예시 데이터로 BE 호출 순서를 흉내 냅니다.
 
 ```bash
