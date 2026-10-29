@@ -3,6 +3,7 @@
 Titan은 한 번에 문장 하나만 받으므로 항목마다 병렬로 부르고 순서대로 돌려준다.
 질의·문서 접두어 규칙이 없어 문서는 제목을 본문 앞에 붙이기만 한다.
 """
+import contextvars
 import json
 import logging
 import os
@@ -13,8 +14,11 @@ from concurrent.futures import ThreadPoolExecutor
 import boto3
 from botocore.config import Config
 from fastapi import HTTPException
+from opentelemetry import trace
 
+from app import llm
 from app.config import AWS_REGION, EMBED_DIM, EMBED_MODEL_ID
+from app.telemetry import tracer
 
 # 항목마다 따로 부르므로 한꺼번에 많이 보내면 호출 한도(Throttling)에 걸린다. 지금 계정은 약 67건을 몰아 받은 뒤
 # 초당 약 1건(실측 2026-10-27). adaptive 재시도가 한도에 맞춰 속도를 낮춘다. 서버는 /embed 읽기 제한(10초) 때문에 4번까지,
@@ -41,7 +45,21 @@ def _one(text: str) -> list[float]:
     r = client.invoke_model(modelId=EMBED_MODEL_ID, body=body, contentType="application/json", accept="application/json")
     if n := r.get("ResponseMetadata", {}).get("RetryAttempts", 0):
         log.warning("bedrock embed retries=%d", n)  # 대개 호출 한도(Throttling)로 다시 보낸 것
-    return json.loads(r["body"].read())["embedding"]
+    out = json.loads(r["body"].read())
+    trace.get_current_span().set_attributes({"bedrock.result": "ok", "bedrock.attempts": n + 1,
+                                             "gen_ai.usage.input_tokens": out.get("inputTextTokenCount", 0)})
+    return out["embedding"]
+
+
+def _traced(text: str, submitted_ns: int) -> list[float]:
+    """풀에서 기다린 시간(bedrock.queue)과 호출(bedrock.invoke_model)을 span으로. 문장 하나 = span 하나"""
+    tracer.start_span("bedrock.queue", start_time=submitted_ns, attributes={"gen_ai.request.model": EMBED_MODEL_ID}).end()
+    with llm._span("bedrock.invoke_model", EMBED_MODEL_ID) as s:
+        try:
+            return _one(text)
+        except Exception as e:
+            llm.mark_failed(s, e)
+            raise
 
 
 def _done(_):
@@ -59,7 +77,10 @@ def encode(purpose: str, items: list[tuple[str, str | None]], budget: float | No
             raise HTTPException(503, "bedrock busy")
         _pending += len(items)
     t = time.monotonic()
-    futures = [_pool.submit(_one, text_of(purpose, text, title)) for text, title in items]
+    # 스레드 풀은 contextvars를 넘겨주지 않아 span이 요청 trace에서 떨어진다 → 호출마다 복사해서 넘긴다
+    # (Context 하나를 여러 스레드가 동시에 run하면 오류라 호출마다 새로 복사)
+    futures = [_pool.submit(contextvars.copy_context().run, _traced, text_of(purpose, text, title), time.time_ns())
+               for text, title in items]
     for f in futures:
         f.add_done_callback(_done)
     try:

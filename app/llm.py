@@ -19,10 +19,12 @@ from botocore.exceptions import (
     ReadTimeoutError,
 )
 from fastapi import HTTPException
+from opentelemetry.trace import Span, SpanKind, StatusCode
 from pydantic import BaseModel, ValidationError
 
 from app import state
 from app.config import AWS_REGION, LLM_MAX_MODEL_LEN, LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT
+from app.telemetry import tracer
 
 # 재시도는 BE가 1회 한다(C-04). boto3 기본 재시도(최대 5회)를 두면 BE 읽기 제한을 넘긴다.
 # LLM_MAX_ATTEMPTS는 평가 스크립트처럼 몰아서 부를 때만 올린다 (호출 한도에 맞춰 기다렸다 다시 보냄)
@@ -61,6 +63,29 @@ def http_error(e: Exception) -> HTTPException:
     if isinstance(e, _UNREACHABLE):
         return HTTPException(503, "bedrock unreachable")
     return HTTPException(502, f"bedrock error {type(e).__name__}")  # 자격 증명 없음 등 설정 문제
+
+
+def mark_failed(span: Span, e: Exception) -> None:
+    """실패한 Bedrock 호출 span에 결과 분류(throttle·timeout·busy·error)·오류 코드·시도 횟수. 오류 메시지는 넣지 않는다"""
+    code = e.response.get("Error", {}).get("Code", "") if isinstance(e, ClientError) else type(e).__name__
+    if isinstance(e, HTTPException):
+        result = "busy"  # 우리 대기열(#37)에서 막힘
+    elif isinstance(e, ReadTimeoutError) or code == "ModelTimeoutException":
+        result = "timeout"
+    elif code in ("ThrottlingException", "ServiceQuotaExceededException"):
+        result = "throttle"
+    else:
+        result = "error"
+    span.set_attributes({"bedrock.result": result, "error.type": code})
+    if isinstance(e, ClientError):
+        span.set_attribute("bedrock.attempts", e.response.get("ResponseMetadata", {}).get("RetryAttempts", 0) + 1)
+    span.set_status(StatusCode.ERROR, code)
+
+
+def _span(name: str, model: str, kind: SpanKind = SpanKind.CLIENT):
+    # 예외는 mark_failed가 직접 기록한다(메시지에 입력 일부가 섞일 수 있어 record_exception 끔)
+    return tracer.start_as_current_span(name, kind=kind, record_exception=False, set_status_on_exception=False,
+                                        attributes={"gen_ai.system": "aws.bedrock", "gen_ai.request.model": model})
 
 
 def _request(messages: list[dict], schema: dict | None, max_tokens: int, temperature: float | None) -> dict:
@@ -112,25 +137,34 @@ async def _acquire() -> float:
 
 
 async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048, temperature: float | None = None) -> str:
-    wait = await _acquire()
+    with _span("bedrock.queue", LLM_MODEL, SpanKind.INTERNAL) as q:  # 대기열(#37) 대기 시간이 trace에 보이게
+        try:
+            wait = await _acquire()
+        except HTTPException as e:
+            mark_failed(q, e)
+            raise
     t, used = time.monotonic(), state.usage.get()
     if used is not None:
         used["llm_calls"] += 1
-    try:
-        r = await asyncio.to_thread(client.converse, **_request(messages, schema, max_tokens, temperature))
-    except ERRORS as e:
-        code = e.response.get("Error", {}).get("Code") if isinstance(e, ClientError) else type(e).__name__
-        log.warning("bedrock llm %s %.1fs wait=%.1fs %s", LLM_MODEL, time.monotonic() - t, wait, code)
-        raise
-    finally:
-        _slots.release()
-    # 호출마다 한 줄 (본문·키는 남기지 않음). 읽기 시간 초과로 끊긴 호출의 토큰은 알 수 없어 합계에 빠진다
-    u = r.get("usage", {})
-    if used is not None:
-        used["input_tokens"] += u.get("inputTokens", 0)
-        used["output_tokens"] += u.get("outputTokens", 0)
-    log.info("bedrock llm %s %.1fs wait=%.1fs retries=%s ok in=%s out=%s", LLM_MODEL, time.monotonic() - t, wait,
-             r.get("ResponseMetadata", {}).get("RetryAttempts", 0), u.get("inputTokens"), u.get("outputTokens"))
+    with _span("bedrock.converse", LLM_MODEL) as s:
+        try:
+            r = await asyncio.to_thread(client.converse, **_request(messages, schema, max_tokens, temperature))
+        except ERRORS as e:
+            mark_failed(s, e)
+            code = e.response.get("Error", {}).get("Code") if isinstance(e, ClientError) else type(e).__name__
+            log.warning("bedrock llm %s %.1fs wait=%.1fs %s", LLM_MODEL, time.monotonic() - t, wait, code)
+            raise
+        finally:
+            _slots.release()
+        # 호출마다 한 줄 (본문·키는 남기지 않음). 읽기 시간 초과로 끊긴 호출의 토큰은 알 수 없어 합계에 빠진다
+        u, retries = r.get("usage", {}), r.get("ResponseMetadata", {}).get("RetryAttempts", 0)
+        if used is not None:
+            used["input_tokens"] += u.get("inputTokens", 0)
+            used["output_tokens"] += u.get("outputTokens", 0)
+        s.set_attributes({"bedrock.result": "ok", "bedrock.attempts": retries + 1,
+                          "gen_ai.usage.input_tokens": u.get("inputTokens", 0), "gen_ai.usage.output_tokens": u.get("outputTokens", 0)})
+        log.info("bedrock llm %s %.1fs wait=%.1fs retries=%s ok in=%s out=%s", LLM_MODEL, time.monotonic() - t, wait,
+                 retries, u.get("inputTokens"), u.get("outputTokens"))
     blocks = r["output"]["message"]["content"]
     if schema:  # 도구 입력이 곧 출력 JSON. 도구 호출이 없으면(길이 초과 등) "" → 검증 실패로 1회 재시도
         return next((json.dumps(b["toolUse"]["input"], ensure_ascii=False) for b in blocks if "toolUse" in b), "")

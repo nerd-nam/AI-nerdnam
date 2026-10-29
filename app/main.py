@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from app import embedding, llm, state
+from app import embedding, llm, state, telemetry
 from app.config import AI_MODE
 from app.routers import embed, gap_guide, guide, match, requirements, restructure
 from app.schemas import ErrorResponse, HealthResponse
@@ -61,6 +61,7 @@ DESCRIPTION = """API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`,
 """
 
 app = FastAPI(title="nerdnam-ai", version="0.4.0", description=DESCRIPTION, lifespan=lifespan)
+telemetry.setup(app)
 
 # 503: 연결 확인 중·Bedrock 호출 한도·장애 → API는 GPU_UNAVAILABLE. 502: LLM 출력 형식이 두 번 틀림 → AI_ERROR (기획서 5.5)
 _503: dict[int | str, dict[str, Any]] = {503: {"model": ErrorResponse, "description": "모델 준비 안 됨·Bedrock 사용 불가 (GPU_UNAVAILABLE)"}}
