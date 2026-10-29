@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {"json": {"()": "app.telemetry.JsonFormatter"}},
+  "handlers": {"stdout": {"class": "logging.StreamHandler", "formatter": "json", "stream": "ext://sys.stdout"}},
+  "loggers": {
+    "uvicorn": {"handlers": ["stdout"], "level": "INFO", "propagate": false},
+    "uvicorn.access": {"handlers": ["stdout"], "level": "INFO", "propagate": false}
+  },
+  "root": {"handlers": ["stdout"], "level": "WARNING"}
+}
