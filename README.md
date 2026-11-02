@@ -216,15 +216,16 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | `AWS_BEARER_TOKEN_BEDROCK` | (없음) | Bedrock API 키. LLM·임베딩 모두 이 키를 씀. 커밋·공유 금지 |
 | `LLM_MODEL` | `global.amazon.nova-2-lite-v1:0` | Bedrock 모델(추론 프로필) ID이자 응답의 `model` 값 |
 | `LLM_TIMEOUT` | `60` | LLM 읽기 제한(초) |
-| `LLM_MAX_ATTEMPTS` | `1` | LLM 호출 시도 횟수. 운영은 1(재시도는 BE가 함). 평가 스크립트로 몰아서 부를 때만 올린다 |
+| `LLM_MAX_ATTEMPTS` | `1` | SDK 시도 횟수. SDK는 읽기 시간 초과·5xx도 다시 보내므로 운영은 1. 평가 스크립트로 몰아서 부를 때만 올린다 |
+| `LLM_THROTTLE_RETRIES` | `2` | 호출 한도 초과(ThrottlingException)일 때만 2·4초 쉬고 다시 보내는 횟수. 시간 초과·5xx는 다시 보내지 않음 |
 | `LLM_MAX_MODEL_LEN` | `128000` | 입력+출력 토큰 한도 (모델 문맥 길이) |
 | `LLM_TEMPERATURE` | `0.7` | 생성 온도. P2(`/requirements/extract`)는 추출이라 이 값과 상관없이 0 |
 | `EMBED_MODEL_ID` | `amazon.titan-embed-text-v2:0` | 임베딩 모델 (바꾸지 않음, 바꾸면 전체 재임베딩) |
 | `LLM_CONCURRENCY` | `8` | 서버 전체 LLM 동시 호출 상한 (replica 1이라 곧 전체 상한) |
 | `LLM_QUEUE` | `32` | 자리를 기다리는 LLM 호출 수 상한. 넘치면 바로 503 `bedrock busy` |
-| `LLM_QUEUE_WAIT` | `5` | LLM 호출이 자리를 기다리는 시간 상한(초). 넘으면 503 |
+| `LLM_QUEUE_WAIT` | `30` | LLM 호출이 자리를 기다리는 시간 상한(초). 넘으면 503. 가장 짧은 BE 읽기 제한 120초 안(SPEC#91) |
 | `EMBED_QUEUE` | `64` | 이미 밀린 임베딩 문장 수가 이만큼이면 새 `/embed`는 바로 503. 동시 호출은 8건 고정 |
-| `EMBED_BUDGET` | `8` | `/embed` 1건이 재시도까지 쓰는 시간 상한(초). BE 읽기 제한 10초 안 |
+| `EMBED_BUDGET` | `100` | `/embed` 1건이 재시도까지 쓰는 시간 상한(초). BE 읽기 제한 120초 안(SPEC#91) |
 
 503 `bedrock busy`는 API가 `GPU_UNAVAILABLE`로 1회 재시도합니다. 호출마다 로그 한 줄에 걸린 시간·대기(`wait`)·재시도 수(`retries`)·오류 코드(예: `ThrottlingException`)를 남깁니다.
 
@@ -240,7 +241,7 @@ BE에서 온 요청의 trace(OpenTelemetry)에 AI 처리와 Bedrock 호출이 �
 | --- | --- | --- |
 | `POST /match` 등 | 서버 | FastAPI 계측 |
 | `bedrock.queue` | 내부 | 동시 호출 자리(LLM) 또는 스레드 풀(임베딩)에서 기다린 시간. 대기열 초과면 `bedrock.result=busy` |
-| `bedrock.converse` / `bedrock.invoke_model` | 클라이언트 | `gen_ai.request.model`, `bedrock.result`(`ok`·`throttle`·`timeout`·`busy`·`error`), `error.type`, `bedrock.attempts`(SDK 시도 횟수), `gen_ai.usage.input_tokens`·`output_tokens`(응답 `usage`와 같은 값) |
+| `bedrock.converse` / `bedrock.invoke_model` | 클라이언트 | `gen_ai.request.model`, `bedrock.result`(`ok`·`throttle`·`timeout`·`busy`·`error`), `error.type`, `bedrock.attempts`(실제 시도 횟수, throttle 재시도 포함), `gen_ai.usage.input_tokens`·`output_tokens`(응답 `usage`와 같은 값) |
 
 Docker 이미지는 로그를 JSON 한 줄씩 stdout에 씁니다(`app/log.json`). 필드는 `time`·`level`·`logger`·`msg`이고, span 안에서 찍힌 줄에는 `trace_id`(32자리)·`span_id`(16자리)가 붙어 Grafana에서 trace로 이어집니다. 로컬 `uv run uvicorn`은 텍스트 로그 그대로입니다.
 
@@ -260,13 +261,14 @@ OTEL_SERVICE_NAME=ai OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 OTEL_EXPO
 | --- | --- | --- |
 | `nerdnam_ai_bedrock_calls_total` | counter | `operation`(`converse`·`invoke_model`), `model`, `result`(`ok`·`throttle`·`timeout`·`error`) |
 | `nerdnam_ai_bedrock_call_duration_seconds` | histogram | `operation`, `model` |
-| `nerdnam_ai_bedrock_attempts_total` | counter | `operation`, `model` (SDK 시도 횟수, 재시도 포함) |
+| `nerdnam_ai_bedrock_attempts_total` | counter | `operation`, `model` (실제 시도 횟수: SDK 재시도 + throttle 재시도) |
 | `nerdnam_ai_bedrock_tokens_total` | counter | `model`, `direction`(`input`·`output`) — 응답 `usage`와 같은 값 |
 | `nerdnam_ai_bedrock_queue_wait_seconds` | histogram | `kind`(`llm`·`embed`) |
 | `nerdnam_ai_bedrock_queue_rejected_total` | counter | `kind` — 대기열이 차거나 시간 상한을 넘어 503(`busy`)으로 거절 |
 | `nerdnam_ai_requests_total` / `nerdnam_ai_request_duration_seconds` | counter / histogram | `route`(경로 템플릿, 없으면 `other`), `status` |
 
 - 대기열 거절(`busy`)은 Bedrock에 가지 않았으므로 `calls_total`이 아니라 `queue_rejected_total`에만 셉니다. throttle 비율은 `calls_total{result="throttle"} / calls_total`입니다.
+- throttle은 `LLM_THROTTLE_RETRIES`번 다시 보내고도 안 될 때만 `result="throttle"`이 됩니다. 다시 보내서 성공한 호출은 `ok`이고 시도 수에만 남으므로, 한도에 걸리기 시작했는지는 `attempts_total / calls_total`이 1보다 커지는지로 봅니다.
 - `/metrics`·`/livez`·`/readyz`·`/health` 요청은 `requests_total`에 세지 않습니다.
 - 라벨에는 유한한 값만 씁니다. 회원·작업 id·프롬프트는 넣지 않습니다.
 - 프로세스 CPU·메모리(`process_*`)는 기본 수집기가 같이 냅니다(Linux).

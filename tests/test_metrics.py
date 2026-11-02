@@ -54,9 +54,49 @@ def test_throttle_counted(monkeypatch):
                            "ResponseMetadata": {"RetryAttempts": 0}}, "Converse")
     monkeypatch.setattr(llm.client, "converse", throttled)
     before = val("nerdnam_ai_bedrock_calls_total", operation="converse", model=LLM, result="throttle")
-    assert c.post("/match", json=MATCH).status_code == 503
+    attempts = val("nerdnam_ai_bedrock_attempts_total", operation="converse", model=LLM)
+    r = c.post("/match", json=MATCH)
+    assert r.status_code == 503
     assert val("nerdnam_ai_bedrock_calls_total", operation="converse", model=LLM, result="throttle") - before == 1
+    assert val("nerdnam_ai_bedrock_attempts_total", operation="converse", model=LLM) - attempts == 1 + llm.LLM_THROTTLE_RETRIES
+    assert r.json()["usage"]["llm_calls"] == 1 + llm.LLM_THROTTLE_RETRIES  # 다시 보낸 것도 호출
     assert val("nerdnam_ai_requests_total", route="/match", status="503") >= 1
+
+
+def test_throttle_retried_then_ok(monkeypatch):
+    """한도 초과 1번 뒤 성공 → 200, 호출 결과는 ok, 시도 수 2"""
+    monkeypatch.setitem(state.models, "llm", "ready")
+    calls = []
+
+    def once_throttled(**req):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ClientError({"Error": {"Code": "ThrottlingException", "Message": "m"},
+                               "ResponseMetadata": {"RetryAttempts": 0}}, "Converse")
+        return {**converse_ok(), "ResponseMetadata": {"RetryAttempts": 0}}
+    monkeypatch.setattr(llm.client, "converse", once_throttled)
+    op = {"operation": "converse", "model": LLM}
+    before = (val("nerdnam_ai_bedrock_calls_total", **op, result="ok"),
+              val("nerdnam_ai_bedrock_calls_total", **op, result="throttle"), val("nerdnam_ai_bedrock_attempts_total", **op))
+    r = c.post("/match", json=MATCH)
+    assert r.status_code == 200 and r.json()["usage"]["llm_calls"] == 2
+    after = (val("nerdnam_ai_bedrock_calls_total", **op, result="ok"),
+             val("nerdnam_ai_bedrock_calls_total", **op, result="throttle"), val("nerdnam_ai_bedrock_attempts_total", **op))
+    assert [a - b for a, b in zip(after, before)] == [1, 0, 2]
+
+
+def test_timeout_not_retried(monkeypatch):
+    """읽기 시간 초과는 다시 보내지 않는다 (C-04 504: 비용·부하만 두 배)"""
+    from botocore.exceptions import ReadTimeoutError
+    monkeypatch.setitem(state.models, "llm", "ready")
+    calls = []
+
+    def slow(**req):
+        calls.append(1)
+        raise ReadTimeoutError(endpoint_url="x")
+    monkeypatch.setattr(llm.client, "converse", slow)
+    assert c.post("/match", json=MATCH).status_code == 504
+    assert len(calls) == 1
 
 
 def test_busy_is_rejected_not_a_call(monkeypatch):

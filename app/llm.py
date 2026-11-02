@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import time
 
 import boto3
@@ -26,8 +27,9 @@ from app import metrics, state
 from app.config import AWS_REGION, LLM_MAX_MODEL_LEN, LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT
 from app.telemetry import tracer
 
-# 재시도는 BE가 1회 한다(C-04). boto3 기본 재시도(최대 5회)를 두면 BE 읽기 제한을 넘긴다.
-# LLM_MAX_ATTEMPTS는 평가 스크립트처럼 몰아서 부를 때만 올린다 (호출 한도에 맞춰 기다렸다 다시 보냄)
+# SDK 재시도는 끈다(1회). SDK는 읽기 시간 초과·5xx도 다시 보내 한 호출이 LLM_TIMEOUT × 시도 수로 늘어나고,
+# 시간 초과는 다시 보내지 않는다는 규칙(C-04 504)과도 어긋난다. 호출 한도 초과(throttle)만 _converse()가 다시 보낸다.
+# LLM_MAX_ATTEMPTS는 평가 스크립트처럼 몰아서 부를 때만 올린다
 client = boto3.client("bedrock-runtime", region_name=AWS_REGION, config=Config(
     read_timeout=LLM_TIMEOUT, connect_timeout=2, max_pool_connections=32,
     retries={"mode": "adaptive", "total_max_attempts": int(os.getenv("LLM_MAX_ATTEMPTS", "1"))}))
@@ -36,7 +38,11 @@ client = boto3.client("bedrock-runtime", region_name=AWS_REGION, config=Config(
 # ponytail: 동시 8건 고정. 호출 한도에 걸리면 줄이고, 처리량이 모자라면 한도 상향 요청
 LLM_CONCURRENCY = int(os.getenv("LLM_CONCURRENCY", "8"))
 LLM_QUEUE = int(os.getenv("LLM_QUEUE", "32"))  # 자리를 기다리는 호출 수 상한. 넘치면 바로 503
-LLM_QUEUE_WAIT = float(os.getenv("LLM_QUEUE_WAIT", "5"))  # 기다리는 시간 상한(초). 가장 짧은 읽기 제한 20초(/extract·/gap-guide) 안
+# 기다리는 시간 상한(초). 가장 짧은 BE 읽기 제한 120초(/extract·/gap-guide, SPEC#91) 안에서
+# 형식 오류 재생성으로 두 번 연달아 불러도 끝나도록. 짧은 몰림은 실패 대신 기다린다
+LLM_QUEUE_WAIT = float(os.getenv("LLM_QUEUE_WAIT", "30"))
+LLM_THROTTLE_RETRIES = int(os.getenv("LLM_THROTTLE_RETRIES", "2"))  # 호출 한도 초과 때 다시 보내는 횟수
+THROTTLE_BACKOFF = 2.0  # 첫 쉼(초). 다시 보낼 때마다 두 배(2·4초) + 흔들기 0~1초
 _slots = asyncio.Semaphore(LLM_CONCURRENCY)
 _waiting = 0
 
@@ -81,8 +87,23 @@ def result_of(e: Exception) -> str:
 
 
 def attempts_of(e: Exception) -> int:
-    """실패한 호출의 SDK 시도 횟수. 응답이 없는 실패(연결·읽기 시간 초과)는 1로 센다"""
-    return e.response.get("ResponseMetadata", {}).get("RetryAttempts", 0) + 1 if isinstance(e, ClientError) else 1
+    """실패한 호출의 실제 시도 횟수(SDK 재시도 + throttle 재시도). 응답이 없는 실패(연결·읽기 시간 초과)는 SDK 몫을 1로 센다"""
+    sdk = e.response.get("ResponseMetadata", {}).get("RetryAttempts", 0) + 1 if isinstance(e, ClientError) else 1
+    return sdk + getattr(e, "throttle_retries", 0)
+
+
+def _converse(req: dict) -> tuple[dict, int]:
+    """Converse 호출. 호출 한도 초과(throttle)만 2·4초(+흔들기) 쉬고 다시 보낸다. 돌려준 int = throttle 재시도 횟수.
+    자리(_slots)를 쥔 채 쉬므로 한도에 걸린 동안은 동시 호출도 저절로 줄어든다"""
+    for n in range(LLM_THROTTLE_RETRIES + 1):
+        try:
+            return client.converse(**req), n
+        except ClientError as e:
+            if n == LLM_THROTTLE_RETRIES or result_of(e) != "throttle":
+                e.throttle_retries = n
+                raise
+            log.warning("bedrock llm throttle retry=%d", n + 1)
+        time.sleep(THROTTLE_BACKOFF * 2 ** n + random.random() * min(THROTTLE_BACKOFF, 1))
 
 
 def mark_failed(span: Span, e: Exception) -> None:
@@ -164,19 +185,22 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
         used["llm_calls"] += 1
     with _span("bedrock.converse", LLM_MODEL) as s:
         try:
-            r = await asyncio.to_thread(client.converse, **_request(messages, schema, max_tokens, temperature))
+            r, throttled = await asyncio.to_thread(_converse, _request(messages, schema, max_tokens, temperature))
         except ERRORS as e:
             mark_failed(s, e)
+            if used is not None:
+                used["llm_calls"] += getattr(e, "throttle_retries", 0)  # 한도 초과로 다시 보낸 것도 호출(C-04 usage)
             metrics.bedrock("converse", LLM_MODEL, result_of(e), time.monotonic() - t, attempts_of(e))
             log.warning("bedrock llm %s %.1fs wait=%.1fs %s", LLM_MODEL, time.monotonic() - t, wait, _code(e))
             raise
         finally:
             _slots.release()
         # 호출마다 한 줄 (본문·키는 남기지 않음). 읽기 시간 초과로 끊긴 호출의 토큰은 알 수 없어 합계에 빠진다
-        u, retries = r.get("usage", {}), r.get("ResponseMetadata", {}).get("RetryAttempts", 0)
+        u, retries = r.get("usage", {}), r.get("ResponseMetadata", {}).get("RetryAttempts", 0) + throttled
         metrics.bedrock("converse", LLM_MODEL, "ok", time.monotonic() - t, retries + 1,
                         u.get("inputTokens", 0), u.get("outputTokens", 0))
         if used is not None:
+            used["llm_calls"] += throttled
             used["input_tokens"] += u.get("inputTokens", 0)
             used["output_tokens"] += u.get("outputTokens", 0)
         s.set_attributes({"bedrock.result": "ok", "bedrock.attempts": retries + 1,
