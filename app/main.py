@@ -10,7 +10,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.exceptions import HTTPException
 
 from app import embedding, llm, metrics, state, telemetry
-from app.config import AI_MODE
+from app.config import AI_MODE, DEADLINE_MARGIN, READ_LIMITS
 from app.routers import embed, gap_guide, guide, match, requirements, restructure
 from app.schemas import ErrorResponse, HealthResponse
 
@@ -54,15 +54,15 @@ async def lifespan(app: FastAPI):
         task.cancel()
 
 
-DESCRIPTION = """API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`, 규칙은 SPEC 기획서 5.5 "AI 서버 공통 규칙".
+DESCRIPTION = f"""API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`, 규칙은 SPEC 기획서 5.5 "AI 서버 공통 규칙".
 
-- 모든 생성 응답에 `model`·`prompt_version`·`usage`(요청 1건의 LLM 입력·출력 토큰과 호출 수 합계). AI 서버가 낸 오류(502·503·504, `/guide` 문맥 초과 422)도 `{detail, usage}`로 실패 전까지 쓴 토큰을 담는다. 요청 형식 검사 422는 LLM을 부르기 전이라 `usage`가 없다(`detail`이 목록). `prompt_version`이 `"stub"`이면 가짜 응답(저장 안 함), `/embed`는 `embedding_model`이 `"stub"`.
+- 모든 생성 응답에 `model`·`prompt_version`·`usage`(요청 1건의 LLM 입력·출력 토큰과 호출 수 합계). AI 서버가 낸 오류(502·503·504, `/guide` 문맥 초과 422)도 `{{detail, usage}}`로 실패 전까지 쓴 토큰을 담는다. 요청 형식 검사 422는 LLM을 부르기 전이라 `usage`가 없다(`detail`이 목록). `prompt_version`이 `"stub"`이면 가짜 응답(저장 안 함), `/embed`는 `embedding_model`이 `"stub"`.
 - 실패: 연결 실패·연결 시간 초과·503 → `GPU_UNAVAILABLE`(1회 재시도), 읽기 시간 초과 → `TIMEOUT`(재시도 안 함), AI 서버의 504 → `TIMEOUT`(재시도 안 함), 422 → `AI_ERROR`(재시도 안 함), 그 밖 5xx → `AI_ERROR`(1회 재시도).
-- 타임아웃: 연결 2초. 읽기 `/health` 2초 · `/embed` 10초 · `/requirements/extract` 20초 · `/restructure` 30초 · `/match` 30초 · `/gap-guide` 20초 · `/guide` 120초.
+- 타임아웃: 연결 2초. 읽기 `/health` 2초 · {' · '.join(f'`{p}` {s}초' for p, s in READ_LIMITS.items())}. AI 서버는 엔드포인트마다 읽기 제한보다 {DEADLINE_MARGIN}초 먼저 스스로 끝내고 503(대기·호출 한도)·504(생성 시간 초과)를 `usage`와 함께 준다.
 - `/guide`는 탭마다 1회 호출, JSON 응답(SSE 아님).
 """
 
-app = FastAPI(title="nerdnam-ai", version="0.4.0", description=DESCRIPTION, lifespan=lifespan)
+app = FastAPI(title="nerdnam-ai", version="0.4.1", description=DESCRIPTION, lifespan=lifespan)
 telemetry.setup(app)
 
 # 503: 연결 확인 중·Bedrock 호출 한도·장애 → API는 GPU_UNAVAILABLE. 502: LLM 출력 형식이 두 번 틀림 → AI_ERROR (기획서 5.5)
@@ -81,6 +81,8 @@ _UNCOUNTED = {"/metrics", "/livez", "/readyz", "/health"}  # 주기적으로 들
 async def track_usage(request: Request, call_next):
     state.usage.set({"input_tokens": 0, "output_tokens": 0, "llm_calls": 0})
     t, status = time.monotonic(), 500
+    limit = READ_LIMITS.get(request.url.path)
+    state.deadline.set(t + limit - DEADLINE_MARGIN if limit else None)  # 기획서 v1.65: 읽기 제한보다 먼저 끝낸다
     try:
         response = await call_next(request)
         status = response.status_code
