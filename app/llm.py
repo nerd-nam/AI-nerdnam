@@ -38,8 +38,8 @@ client = boto3.client("bedrock-runtime", region_name=AWS_REGION, config=Config(
 # ponytail: 동시 8건 고정. 호출 한도에 걸리면 줄이고, 처리량이 모자라면 한도 상향 요청
 LLM_CONCURRENCY = int(os.getenv("LLM_CONCURRENCY", "8"))
 LLM_QUEUE = int(os.getenv("LLM_QUEUE", "32"))  # 자리를 기다리는 호출 수 상한. 넘치면 바로 503
-# 기다리는 시간 상한(초). 가장 짧은 BE 읽기 제한 120초(/extract·/gap-guide, SPEC#91) 안에서
-# 형식 오류 재생성으로 두 번 연달아 불러도 끝나도록. 짧은 몰림은 실패 대신 기다린다
+# 호출 1번이 자리를 기다리는 시간 상한(초). 요청 마감(읽기 제한 − 10초, 기획서 v1.65)이 더 가까우면 그때까지만.
+# 한 호출이 마감을 다 쓰지 않게 해 형식 오류 재생성 몫을 남긴다. 짧은 몰림은 실패 대신 기다린다
 LLM_QUEUE_WAIT = float(os.getenv("LLM_QUEUE_WAIT", "30"))
 LLM_THROTTLE_RETRIES = int(os.getenv("LLM_THROTTLE_RETRIES", "2"))  # 호출 한도 초과 때 다시 보내는 횟수
 THROTTLE_BACKOFF = 2.0  # 첫 쉼(초). 다시 보낼 때마다 두 배(2·4초) + 흔들기 0~1초
@@ -94,16 +94,19 @@ def attempts_of(e: Exception) -> int:
 
 def _converse(req: dict) -> tuple[dict, int]:
     """Converse 호출. 호출 한도 초과(throttle)만 2·4초(+흔들기) 쉬고 다시 보낸다. 돌려준 int = throttle 재시도 횟수.
-    자리(_slots)를 쥔 채 쉬므로 한도에 걸린 동안은 동시 호출도 저절로 줄어든다"""
+    자리(_slots)를 쥔 채 쉬므로 한도에 걸린 동안은 동시 호출도 저절로 줄어든다. 쉬면 요청 마감을 넘길 때는 바로 503"""
     for n in range(LLM_THROTTLE_RETRIES + 1):
+        delay = THROTTLE_BACKOFF * 2 ** n + random.random() * min(THROTTLE_BACKOFF, 1)
         try:
             return client.converse(**req), n
         except ClientError as e:
-            if n == LLM_THROTTLE_RETRIES or result_of(e) != "throttle":
-                e.throttle_retries = n
+            left = state.left()
+            if n == LLM_THROTTLE_RETRIES or result_of(e) != "throttle" or (left is not None and left <= delay):
+                setattr(e, "throttle_retries", n)  # noqa: B010 — 타입 검사기용. 읽는 쪽은 attempts_of의 getattr
                 raise
             log.warning("bedrock llm throttle retry=%d", n + 1)
-        time.sleep(THROTTLE_BACKOFF * 2 ** n + random.random() * min(THROTTLE_BACKOFF, 1))
+        time.sleep(delay)
+    raise AssertionError("unreachable")  # 마지막 회차는 return 아니면 raise로 끝난다. 타입 검사기용
 
 
 def mark_failed(span: Span, e: Exception) -> None:
@@ -161,7 +164,7 @@ async def _acquire() -> float:
     t = time.monotonic()
     _waiting += 1
     try:
-        await asyncio.wait_for(_slots.acquire(), LLM_QUEUE_WAIT)
+        await asyncio.wait_for(_slots.acquire(), state.left(LLM_QUEUE_WAIT))  # 요청 마감이 더 가까우면 그때까지만
     except TimeoutError:
         log.warning("bedrock llm busy wait=%.1fs", time.monotonic() - t)
         metrics.REJECTED.labels("llm").inc()
@@ -171,6 +174,12 @@ async def _acquire() -> float:
     wait = time.monotonic() - t
     metrics.QUEUE_WAIT.labels("llm").observe(wait)
     return wait
+
+
+def _release(call: asyncio.Future) -> None:
+    _slots.release()
+    if not call.cancelled():
+        call.exception()  # 마감 뒤에 끝난 호출의 오류는 이미 504로 답했으므로 읽어만 둔다(경고 로그 방지)
 
 
 async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048, temperature: float | None = None) -> str:
@@ -184,8 +193,17 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
     if used is not None:
         used["llm_calls"] += 1
     with _span("bedrock.converse", LLM_MODEL) as s:
+        # 생성은 마감까지만 기다린다(넘으면 504). 스레드는 멈출 수 없으므로 자리는 호출이 실제로 끝날 때 돌려준다
+        call = asyncio.ensure_future(asyncio.to_thread(_converse, _request(messages, schema, max_tokens, temperature)))
+        call.add_done_callback(_release)
         try:
-            r, throttled = await asyncio.to_thread(_converse, _request(messages, schema, max_tokens, temperature))
+            r, throttled = await asyncio.wait_for(asyncio.shield(call), state.left())
+        except TimeoutError:
+            mark_failed(s, TimeoutError())
+            s.set_attribute("bedrock.result", "timeout")
+            metrics.bedrock("converse", LLM_MODEL, "timeout", time.monotonic() - t, 1)
+            log.warning("bedrock llm %s %.1fs wait=%.1fs deadline", LLM_MODEL, time.monotonic() - t, wait)
+            raise HTTPException(504, "llm deadline")  # API는 TIMEOUT(재시도 안 함)
         except ERRORS as e:
             mark_failed(s, e)
             if used is not None:
@@ -193,8 +211,6 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
             metrics.bedrock("converse", LLM_MODEL, result_of(e), time.monotonic() - t, attempts_of(e))
             log.warning("bedrock llm %s %.1fs wait=%.1fs %s", LLM_MODEL, time.monotonic() - t, wait, _code(e))
             raise
-        finally:
-            _slots.release()
         # 호출마다 한 줄 (본문·키는 남기지 않음). 읽기 시간 초과로 끊긴 호출의 토큰은 알 수 없어 합계에 빠진다
         u, retries = r.get("usage", {}), r.get("ResponseMetadata", {}).get("RetryAttempts", 0) + throttled
         metrics.bedrock("converse", LLM_MODEL, "ok", time.monotonic() - t, retries + 1,

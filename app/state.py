@@ -1,3 +1,4 @@
+import time
 from contextvars import ContextVar
 
 from app.config import AI_MODE
@@ -10,6 +11,18 @@ models = {"llm": _initial, "embedding": _initial}
 # 요청 1건 안의 LLM 사용량 합계 (main.py 미들웨어가 요청마다 새로 만든다). /match처럼 동시에 부른 호출도 같은 dict에 더한다
 usage: ContextVar[dict | None] = ContextVar("usage", default=None)
 
+# 요청 1건의 마감(time.monotonic). API 읽기 제한보다 DEADLINE_MARGIN초 앞 (main.py 미들웨어가 정함). 요청 밖(연결 확인)은 None
+deadline: ContextVar[float | None] = ContextVar("deadline", default=None)
+
 
 def current_usage() -> dict:
     return dict(usage.get() or {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0})
+
+
+def left(cap: float | None = None) -> float | None:
+    """마감까지 남은 초(음수일 수 있음)와 cap 중 작은 값. 마감이 없으면 cap 그대로(None = 제한 없음)"""
+    d = deadline.get()
+    if d is None:
+        return cap
+    r = d - time.monotonic()
+    return r if cap is None else min(cap, r)

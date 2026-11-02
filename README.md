@@ -62,7 +62,8 @@ uv run uvicorn app.main:app --reload --port 8000     # 서버 실행
   | 504 | LLM 생성 시간 초과 | `TIMEOUT`, 재시도 안 함 |
   | 422 | 요청 형식이 틀림 | `AI_ERROR`, 재시도 안 함 |
 
-- 타임아웃(API 서버 기준): 연결 2초, 읽기는 `/health` 2초 · `/embed` 10초 · `/requirements/extract` 20초 · `/gap-guide` 20초 · `/restructure` 30초 · `/match` 30초 · `/guide` 120초.
+- 타임아웃(API 서버 기준, 기획서 v1.65): 연결 2초, 읽기는 `/health` 2초 · `/embed` 120초 · `/requirements/extract` 120초 · `/gap-guide` 120초 · `/restructure` 180초 · `/match` 300초 · `/guide` 300초. 값은 `app/config.py`의 `READ_LIMITS` 한 곳에 있고 `/openapi.json` 설명문도 여기서 만듭니다.
+- **요청 마감:** AI 서버는 요청마다 읽기 제한보다 10초 먼저 마감을 두고, 대기열 대기·throttle 재시도·생성(형식 재생성 포함)이 마감을 넘지 않게 합니다. 대기·한도에서 걸리면 503, 생성 중이면 504를 `usage`와 함께 돌려줍니다. 마감에 끊긴 생성 호출은 끝날 때까지 동시 호출 자리를 차지합니다(스레드는 멈출 수 없음).
 
 자세한 요청·응답 필드는 서버를 띄운 뒤 `/docs`에서 보거나, SPEC의 계약 파일을 보세요. 규칙의 원문은 기획서 5.5입니다.
 
@@ -223,9 +224,10 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | `EMBED_MODEL_ID` | `amazon.titan-embed-text-v2:0` | 임베딩 모델 (바꾸지 않음, 바꾸면 전체 재임베딩) |
 | `LLM_CONCURRENCY` | `8` | 서버 전체 LLM 동시 호출 상한 (replica 1이라 곧 전체 상한) |
 | `LLM_QUEUE` | `32` | 자리를 기다리는 LLM 호출 수 상한. 넘치면 바로 503 `bedrock busy` |
-| `LLM_QUEUE_WAIT` | `30` | LLM 호출이 자리를 기다리는 시간 상한(초). 넘으면 503. 가장 짧은 BE 읽기 제한 120초 안(SPEC#91) |
+| `LLM_QUEUE_WAIT` | `30` | LLM 호출 1번이 자리를 기다리는 시간 상한(초). 요청 마감이 더 가까우면 그때까지. 넘으면 503 |
 | `EMBED_QUEUE` | `64` | 이미 밀린 임베딩 문장 수가 이만큼이면 새 `/embed`는 바로 503. 동시 호출은 8건 고정 |
-| `EMBED_BUDGET` | `100` | `/embed` 1건이 재시도까지 쓰는 시간 상한(초). BE 읽기 제한 120초 안(SPEC#91) |
+| `EMBED_BUDGET` | `110` | `/embed` 1건이 재시도까지 쓰는 시간 상한(초). 읽기 제한 120초보다 10초 먼저 |
+| `EMBED_MAX_ATTEMPTS` | `8` | 임베딩 문장 1개의 SDK 시도 횟수(adaptive, 호출 한도에 맞춰 쉼). 요청 전체는 `EMBED_BUDGET` 안에서 끊김 |
 
 503 `bedrock busy`는 API가 `GPU_UNAVAILABLE`로 1회 재시도합니다. 호출마다 로그 한 줄에 걸린 시간·대기(`wait`)·재시도 수(`retries`)·오류 코드(예: `ThrottlingException`)를 남깁니다.
 

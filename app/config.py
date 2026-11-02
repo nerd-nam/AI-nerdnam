@@ -18,6 +18,11 @@ LLM_SAMPLING = {
     "top_p": 0.8,
 }
 
+# API 서버의 읽기 제한(초, 계약 C-04·기획서 v1.65). AI 서버는 요청마다 이보다 DEADLINE_MARGIN초 먼저 스스로 끝내고
+# 503(대기·한도)·504(생성)를 usage와 함께 준다. 계약 설명문(/openapi.json)의 "타임아웃" 줄도 이 표에서 만든다
+READ_LIMITS = {"/embed": 120, "/requirements/extract": 120, "/restructure": 180, "/match": 300, "/gap-guide": 120, "/guide": 300}
+DEADLINE_MARGIN = 10
+
 # 임베딩. 모델·차원을 바꾸면 저장된 벡터를 전부 다시 계산해야 함 (BE는 embedding_model 값으로 재임베딩 대상을 찾는다)
 EMBED_MODEL_ID = os.getenv("EMBED_MODEL_ID", "amazon.titan-embed-text-v2:0")
 EMBED_DIM = 1024

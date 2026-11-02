@@ -21,16 +21,16 @@ from app.config import AWS_REGION, EMBED_DIM, EMBED_MODEL_ID
 from app.telemetry import tracer
 
 # 항목마다 따로 부르므로 한꺼번에 많이 보내면 호출 한도(Throttling)에 걸린다. 지금 계정은 약 67건을 몰아 받은 뒤
-# 초당 약 1건(실측 2026-10-27). adaptive 재시도가 한도에 맞춰 속도를 낮춘다. 서버는 호출마다 4번까지(전체 시간은 EMBED_BUDGET),
-# 평가 스크립트는 EMBED_MAX_ATTEMPTS를 늘려 끝까지 돌린다
+# 초당 약 1건(실측 2026-10-27). adaptive 재시도가 한도에 맞춰 속도를 낮춘다. 서버는 문장마다 8번까지 다시 보내고
+# (쉬는 시간 최대 20초씩), 요청 전체는 EMBED_BUDGET·요청 마감 안에서 끊는다. 평가 스크립트는 EMBED_MAX_ATTEMPTS를 더 늘린다
 client = boto3.client("bedrock-runtime", region_name=AWS_REGION, config=Config(
     read_timeout=10, connect_timeout=2, max_pool_connections=8,
-    retries={"mode": "adaptive", "total_max_attempts": int(os.getenv("EMBED_MAX_ATTEMPTS", "4"))}))
+    retries={"mode": "adaptive", "total_max_attempts": int(os.getenv("EMBED_MAX_ATTEMPTS", "8"))}))
 # ponytail: 동시 8건 고정. 호출 한도(분당 요청 수)에 걸리면 줄이고, 처리량이 모자라면 한도 상향 요청
 # 이 풀이 서버 전체 임베딩 동시 호출 상한이다 (#37, replica 1)
 _pool = ThreadPoolExecutor(8)
 EMBED_QUEUE = int(os.getenv("EMBED_QUEUE", "64"))  # 이미 밀린 문장 수가 이만큼이면 새 요청은 바로 503 (요청 하나는 크기와 상관없이 받음)
-BUDGET = float(os.getenv("EMBED_BUDGET", "100"))  # /embed 1건이 재시도까지 쓰는 시간 상한(초). BE 읽기 제한 120초(SPEC#91) 안, 20초 여유
+BUDGET = float(os.getenv("EMBED_BUDGET", "110"))  # /embed 1건이 재시도까지 쓰는 시간 상한(초). 읽기 제한 120초보다 10초 먼저(기획서 v1.65)
 _pending = 0
 _lock = threading.Lock()
 log = logging.getLogger("uvicorn.error")
