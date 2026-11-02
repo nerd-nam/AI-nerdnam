@@ -26,7 +26,7 @@ def setup(app: FastAPI) -> None:
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))  # http/protobuf, 주소는 환경변수
         trace.set_tracer_provider(provider)
     # BE가 보낸 traceparent를 이어 받는다. 프로브는 주기마다 들어오므로 빼고, ASGI receive·send 하위 span(요청마다 4개)도 뺀다
-    FastAPIInstrumentor.instrument_app(app, excluded_urls="livez,readyz,health", exclude_spans=["receive", "send"])
+    FastAPIInstrumentor.instrument_app(app, excluded_urls="livez,readyz,health,metrics", exclude_spans=["receive", "send"])
 
 
 class JsonFormatter(logging.Formatter):

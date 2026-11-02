@@ -22,7 +22,7 @@ from fastapi import HTTPException
 from opentelemetry.trace import Span, SpanKind, StatusCode
 from pydantic import BaseModel, ValidationError
 
-from app import state
+from app import metrics, state
 from app.config import AWS_REGION, LLM_MAX_MODEL_LEN, LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT
 from app.telemetry import tracer
 
@@ -65,20 +65,32 @@ def http_error(e: Exception) -> HTTPException:
     return HTTPException(502, f"bedrock error {type(e).__name__}")  # 자격 증명 없음 등 설정 문제
 
 
+def _code(e: Exception) -> str:
+    return e.response.get("Error", {}).get("Code", "") if isinstance(e, ClientError) else type(e).__name__
+
+
+def result_of(e: Exception) -> str:
+    """실패 결과 분류. span 속성과 지표(app/metrics.py)가 같이 쓴다"""
+    if isinstance(e, HTTPException):
+        return "busy"  # 우리 대기열(#37)에서 막힘
+    if isinstance(e, ReadTimeoutError) or _code(e) == "ModelTimeoutException":
+        return "timeout"
+    if _code(e) in ("ThrottlingException", "ServiceQuotaExceededException"):
+        return "throttle"
+    return "error"
+
+
+def attempts_of(e: Exception) -> int:
+    """실패한 호출의 SDK 시도 횟수. 응답이 없는 실패(연결·읽기 시간 초과)는 1로 센다"""
+    return e.response.get("ResponseMetadata", {}).get("RetryAttempts", 0) + 1 if isinstance(e, ClientError) else 1
+
+
 def mark_failed(span: Span, e: Exception) -> None:
     """실패한 Bedrock 호출 span에 결과 분류(throttle·timeout·busy·error)·오류 코드·시도 횟수. 오류 메시지는 넣지 않는다"""
-    code = e.response.get("Error", {}).get("Code", "") if isinstance(e, ClientError) else type(e).__name__
-    if isinstance(e, HTTPException):
-        result = "busy"  # 우리 대기열(#37)에서 막힘
-    elif isinstance(e, ReadTimeoutError) or code == "ModelTimeoutException":
-        result = "timeout"
-    elif code in ("ThrottlingException", "ServiceQuotaExceededException"):
-        result = "throttle"
-    else:
-        result = "error"
-    span.set_attributes({"bedrock.result": result, "error.type": code})
+    code = _code(e)
+    span.set_attributes({"bedrock.result": result_of(e), "error.type": code})
     if isinstance(e, ClientError):
-        span.set_attribute("bedrock.attempts", e.response.get("ResponseMetadata", {}).get("RetryAttempts", 0) + 1)
+        span.set_attribute("bedrock.attempts", attempts_of(e))
     span.set_status(StatusCode.ERROR, code)
 
 
@@ -123,6 +135,7 @@ async def _acquire() -> float:
     global _waiting
     if _waiting >= LLM_QUEUE:
         log.warning("bedrock llm busy queue=%d", _waiting)
+        metrics.REJECTED.labels("llm").inc()
         raise HTTPException(503, "bedrock busy")
     t = time.monotonic()
     _waiting += 1
@@ -130,10 +143,13 @@ async def _acquire() -> float:
         await asyncio.wait_for(_slots.acquire(), LLM_QUEUE_WAIT)
     except TimeoutError:
         log.warning("bedrock llm busy wait=%.1fs", time.monotonic() - t)
+        metrics.REJECTED.labels("llm").inc()
         raise HTTPException(503, "bedrock busy")
     finally:
         _waiting -= 1
-    return time.monotonic() - t
+    wait = time.monotonic() - t
+    metrics.QUEUE_WAIT.labels("llm").observe(wait)
+    return wait
 
 
 async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048, temperature: float | None = None) -> str:
@@ -151,13 +167,15 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
             r = await asyncio.to_thread(client.converse, **_request(messages, schema, max_tokens, temperature))
         except ERRORS as e:
             mark_failed(s, e)
-            code = e.response.get("Error", {}).get("Code") if isinstance(e, ClientError) else type(e).__name__
-            log.warning("bedrock llm %s %.1fs wait=%.1fs %s", LLM_MODEL, time.monotonic() - t, wait, code)
+            metrics.bedrock("converse", LLM_MODEL, result_of(e), time.monotonic() - t, attempts_of(e))
+            log.warning("bedrock llm %s %.1fs wait=%.1fs %s", LLM_MODEL, time.monotonic() - t, wait, _code(e))
             raise
         finally:
             _slots.release()
         # 호출마다 한 줄 (본문·키는 남기지 않음). 읽기 시간 초과로 끊긴 호출의 토큰은 알 수 없어 합계에 빠진다
         u, retries = r.get("usage", {}), r.get("ResponseMetadata", {}).get("RetryAttempts", 0)
+        metrics.bedrock("converse", LLM_MODEL, "ok", time.monotonic() - t, retries + 1,
+                        u.get("inputTokens", 0), u.get("outputTokens", 0))
         if used is not None:
             used["input_tokens"] += u.get("inputTokens", 0)
             used["output_tokens"] += u.get("outputTokens", 0)

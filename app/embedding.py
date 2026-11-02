@@ -16,7 +16,7 @@ from botocore.config import Config
 from fastapi import HTTPException
 from opentelemetry import trace
 
-from app import llm
+from app import llm, metrics
 from app.config import AWS_REGION, EMBED_DIM, EMBED_MODEL_ID
 from app.telemetry import tracer
 
@@ -41,24 +41,30 @@ def text_of(purpose: str, text: str, title: str | None = None) -> str:
 
 
 def _one(text: str) -> list[float]:
+    t = time.monotonic()
     body = json.dumps({"inputText": text, "dimensions": EMBED_DIM, "normalize": True}, ensure_ascii=False)
     r = client.invoke_model(modelId=EMBED_MODEL_ID, body=body, contentType="application/json", accept="application/json")
     if n := r.get("ResponseMetadata", {}).get("RetryAttempts", 0):
         log.warning("bedrock embed retries=%d", n)  # 대개 호출 한도(Throttling)로 다시 보낸 것
     out = json.loads(r["body"].read())
+    tokens = out.get("inputTextTokenCount", 0)
     trace.get_current_span().set_attributes({"bedrock.result": "ok", "bedrock.attempts": n + 1,
-                                             "gen_ai.usage.input_tokens": out.get("inputTextTokenCount", 0)})
+                                             "gen_ai.usage.input_tokens": tokens})
+    metrics.bedrock("invoke_model", EMBED_MODEL_ID, "ok", time.monotonic() - t, n + 1, tokens)
     return out["embedding"]
 
 
 def _traced(text: str, submitted_ns: int) -> list[float]:
     """풀에서 기다린 시간(bedrock.queue)과 호출(bedrock.invoke_model)을 span으로. 문장 하나 = span 하나"""
     tracer.start_span("bedrock.queue", start_time=submitted_ns, attributes={"gen_ai.request.model": EMBED_MODEL_ID}).end()
+    metrics.QUEUE_WAIT.labels("embed").observe((time.time_ns() - submitted_ns) / 1e9)
+    t = time.monotonic()
     with llm._span("bedrock.invoke_model", EMBED_MODEL_ID) as s:
         try:
             return _one(text)
         except Exception as e:
             llm.mark_failed(s, e)
+            metrics.bedrock("invoke_model", EMBED_MODEL_ID, llm.result_of(e), time.monotonic() - t, llm.attempts_of(e))
             raise
 
 
@@ -74,6 +80,7 @@ def encode(purpose: str, items: list[tuple[str, str | None]], budget: float | No
     with _lock:
         if _pending >= EMBED_QUEUE:
             log.warning("bedrock embed busy pending=%d", _pending)
+            metrics.REJECTED.labels("embed").inc()
             raise HTTPException(503, "bedrock busy")
         _pending += len(items)
     t = time.monotonic()
@@ -87,6 +94,7 @@ def encode(purpose: str, items: list[tuple[str, str | None]], budget: float | No
         out = [f.result(None if budget is None else max(0.0, t + budget - time.monotonic())) for f in futures]
     except TimeoutError:
         log.warning("bedrock embed n=%d %.1fs over budget", len(items), time.monotonic() - t)
+        metrics.REJECTED.labels("embed").inc()
         raise HTTPException(503, "bedrock busy")
     except Exception as e:
         log.warning("bedrock embed n=%d %.1fs %s", len(items), time.monotonic() - t,

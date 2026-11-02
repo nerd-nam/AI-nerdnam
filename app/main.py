@@ -1,13 +1,15 @@
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.exceptions import HTTPException
 
-from app import embedding, llm, state, telemetry
+from app import embedding, llm, metrics, state, telemetry
 from app.config import AI_MODE
 from app.routers import embed, gap_guide, guide, match, requirements, restructure
 from app.schemas import ErrorResponse, HealthResponse
@@ -72,10 +74,22 @@ for r in (restructure, requirements, match, gap_guide, guide):
     app.include_router(r.router, responses=_503 | _502)
 
 
+_UNCOUNTED = {"/metrics", "/livez", "/readyz", "/health"}  # 주기적으로 들어오는 수집·프로브 (trace 제외 목록과 같음)
+
+
 @app.middleware("http")
 async def track_usage(request: Request, call_next):
     state.usage.set({"input_tokens": 0, "output_tokens": 0, "llm_calls": 0})
-    return await call_next(request)
+    t, status = time.monotonic(), 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        route = getattr(request.scope.get("route"), "path", "other")  # 경로 템플릿 (매칭 안 되면 other)
+        if route not in _UNCOUNTED:
+            metrics.REQUESTS.labels(route, str(status)).inc()
+            metrics.REQUEST_SECONDS.labels(route).observe(time.monotonic() - t)
 
 
 @app.exception_handler(HTTPException)
@@ -93,6 +107,12 @@ def health():
 @app.get("/livez", include_in_schema=False)
 def livez():
     return {"status": "ok"}
+
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus_metrics():
+    # Prometheus 수집용 (#44, 계약 C-04 밖). 프로세스 CPU·메모리는 기본 수집기가 같이 낸다(Linux)
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/readyz", include_in_schema=False)

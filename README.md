@@ -20,7 +20,8 @@ nerdnam(AI 맞춤형 지원서 코치)의 **AI 서버**입니다. 프로젝트 �
 7. [계약(API 모양)을 바꿀 때](#계약api-모양을-바꿀-때)
 8. [환경변수](#환경변수)
 9. [추적과 로그](#추적과-로그)
-10. [관련 문서](#관련-문서)
+10. [지표](#지표)
+11. [관련 문서](#관련-문서)
 
 ## 빠르게 시작하기
 
@@ -88,6 +89,8 @@ Kubernetes 프로브는 계약(C-04) 밖의 두 주소를 씁니다. 둘 다 저
 | --- | --- | --- |
 | `GET /livez` | liveness | 프로세스가 살아 있으면 항상 200 |
 | `GET /readyz` | readiness | 첫 연결 확인이 끝났고(`loading` 없음) LLM·임베딩 중 하나라도 `ready`(또는 `stub`)면 200, 아니면 503. 한쪽만 `error`면 Pod는 트래픽을 받고 그 기능 요청만 503 |
+
+Prometheus 수집 주소 `GET /metrics`도 계약 밖입니다([지표](#지표)).
 
 ### 사용하는 모델
 
@@ -247,6 +250,30 @@ Docker 이미지는 로그를 JSON 한 줄씩 stdout에 씁니다(`app/log.json`
 docker run -d --name lgtm -p 3000:3000 -p 4318:4318 grafana/otel-lgtm   # Grafana http://localhost:3000
 OTEL_SERVICE_NAME=ai OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
   uv run --env-file .env uvicorn app.main:app --port 8000 --log-config app/log.json
+```
+
+## 지표
+
+`GET /metrics`(같은 포트 8000)가 Prometheus 형식으로 지표를 냅니다. 계약 C-04 밖이라 OpenAPI에 없습니다. Bedrock 지표는 위 span 속성과 같은 자리에서 세므로 trace와 숫자가 맞습니다(샘플링과 상관없이 전부 셈).
+
+| 지표 | 종류 | 라벨 |
+| --- | --- | --- |
+| `nerdnam_ai_bedrock_calls_total` | counter | `operation`(`converse`·`invoke_model`), `model`, `result`(`ok`·`throttle`·`timeout`·`error`) |
+| `nerdnam_ai_bedrock_call_duration_seconds` | histogram | `operation`, `model` |
+| `nerdnam_ai_bedrock_attempts_total` | counter | `operation`, `model` (SDK 시도 횟수, 재시도 포함) |
+| `nerdnam_ai_bedrock_tokens_total` | counter | `model`, `direction`(`input`·`output`) — 응답 `usage`와 같은 값 |
+| `nerdnam_ai_bedrock_queue_wait_seconds` | histogram | `kind`(`llm`·`embed`) |
+| `nerdnam_ai_bedrock_queue_rejected_total` | counter | `kind` — 대기열이 차거나 시간 상한을 넘어 503(`busy`)으로 거절 |
+| `nerdnam_ai_requests_total` / `nerdnam_ai_request_duration_seconds` | counter / histogram | `route`(경로 템플릿, 없으면 `other`), `status` |
+
+- 대기열 거절(`busy`)은 Bedrock에 가지 않았으므로 `calls_total`이 아니라 `queue_rejected_total`에만 셉니다. throttle 비율은 `calls_total{result="throttle"} / calls_total`입니다.
+- `/metrics`·`/livez`·`/readyz`·`/health` 요청은 `requests_total`에 세지 않습니다.
+- 라벨에는 유한한 값만 씁니다. 회원·작업 id·프롬프트는 넣지 않습니다.
+- 프로세스 CPU·메모리(`process_*`)는 기본 수집기가 같이 냅니다(Linux).
+- uvicorn 워커가 1개라 일반 레지스트리를 씁니다. 워커를 늘리면 다중 프로세스 모드로 바꿔야 합니다.
+
+```bash
+curl -s localhost:8000/metrics | grep '^nerdnam_ai_'
 ```
 
 ## 관련 문서
