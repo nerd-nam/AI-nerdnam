@@ -12,7 +12,7 @@ from starlette.exceptions import HTTPException
 from app import embedding, llm, metrics, state, telemetry, worker
 from app.config import AI_MODE, DEADLINE_MARGIN, READ_LIMITS
 from app.routers import embed, gap_guide, guide, match, requirements, restructure
-from app.schemas import ErrorResponse, HealthResponse
+from app.schemas import ErrorResponse, HealthResponse, QueueRequest, QueueResult
 
 log = logging.getLogger("uvicorn.error")
 
@@ -64,10 +64,24 @@ DESCRIPTION = f"""API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`
 - 실패: 연결 실패·연결 시간 초과·503 → `GPU_UNAVAILABLE`(1회 재시도), 읽기 시간 초과 → `TIMEOUT`(재시도 안 함), AI 서버의 504 → `TIMEOUT`(재시도 안 함), 422 → `AI_ERROR`(재시도 안 함), 그 밖 5xx → `AI_ERROR`(1회 재시도).
 - 타임아웃: 연결 2초. 읽기 `/health` 2초 · {' · '.join(f'`{p}` {s}초' for p, s in READ_LIMITS.items())}. AI 서버는 엔드포인트마다 읽기 제한보다 {DEADLINE_MARGIN}초 먼저 스스로 끝내고 503(대기·호출 한도)·504(생성 시간 초과)를 `usage`와 함께 준다.
 - `/guide`는 탭마다 1회 호출, JSON 응답(SSE 아님).
+- Redis 큐 경로(ADR-0009, `AI_QUEUE_ENABLED`): 경로가 아니라 스트림 메시지라 형식만 `components.schemas`의 `QueueRequest`(BE → AI)·`QueueResult`(AI → BE)에 둔다. 큐 경로에는 요청 마감이 없고, 503은 AI가 다시 하며 504는 502로 온다.
 """
 
-app = FastAPI(title="nerdnam-ai", version="0.4.1", description=DESCRIPTION, lifespan=lifespan)
+app = FastAPI(title="nerdnam-ai", version="0.5.0", description=DESCRIPTION, lifespan=lifespan)
 telemetry.setup(app)
+_route_openapi = app.openapi
+
+
+def _openapi() -> dict:
+    """경로 계약 + Redis 큐 메시지 형식(QueueRequest·QueueResult, ADR-0009). BE 계약 테스트가 components에서 읽는다"""
+    if app.openapi_schema is None:
+        schemas = _route_openapi()["components"]["schemas"]
+        for m in (QueueRequest, QueueResult):
+            schemas[m.__name__] = m.model_json_schema(ref_template="#/components/schemas/{model}")
+    return app.openapi_schema
+
+
+app.openapi = _openapi  # type: ignore[method-assign]
 
 # 503: 연결 확인 중·Bedrock 호출 한도·장애 → API는 GPU_UNAVAILABLE. 502: LLM 출력 형식이 두 번 틀림 → AI_ERROR (기획서 5.5)
 _503: dict[int | str, dict[str, Any]] = {503: {"model": ErrorResponse, "description": "모델 준비 안 됨·Bedrock 사용 불가 (GPU_UNAVAILABLE)"}}

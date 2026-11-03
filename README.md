@@ -7,7 +7,7 @@ nerdnam(AI 맞춤형 지원서 코치)의 **AI 서버**입니다. 프로젝트 �
 - FastAPI, Python 3.12, 패키지 관리는 [uv](https://docs.astral.sh/uv/)를 씁니다.
 
 > 기획·계약·예시 데이터는 공용 문서 레포 `nerdnam-docs`(로컬 폴더 `SPEC-nerdnam`)에 있습니다.
-> 이 서버는 계약 `contracts/api-ai.openapi.yaml`의 태그 **`contracts-v0.3.0`** 을 따릅니다.
+> 이 서버는 계약 `contracts/api-ai.openapi.yaml`의 태그 **`contracts-v0.5.0`** 을 따릅니다.
 
 ## 목차
 

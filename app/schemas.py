@@ -323,3 +323,27 @@ GuideContent = Annotated[
 class GuideResponse(Meta):
     content: GuideContent  # 요청한 tab의 content
     cited_chunk_ids: list[int]  # content 안 sources 전체 (중복 없이)
+
+
+# ── Redis 큐 메시지 (SPEC ADR-0009, AI_QUEUE_ENABLED) ──────────
+# 경로가 아니라 Redis 스트림 필드라 OpenAPI components에만 싣는다(main.py). 스트림 필드 값은 모두 문자열
+QueueOp = Literal["requirements/extract", "restructure", "match", "gap-guide", "guide", "embed"]
+
+
+class QueueRequest(BaseModel):
+    """BE → AI: XADD ai:req:llm(LLM op) / ai:req:embed(embed, purpose=query) / ai:req:embed-bg(embed, purpose=document)"""
+    id: str = Field(description="`{op}:{uuid}`. 결과를 기다리는 동안 다시 넣어도 같은 값(AI가 한 번만 실행)")
+    op: QueueOp = Field(description="HTTP 경로에서 `/`를 뺀 것")
+    body: str = Field(description="그 경로의 HTTP 요청 JSON 그대로")
+    traceparent: str | None = Field(None, description="W3C traceparent. AI가 trace를 이어 붙인다")
+    enqueued_at: str = Field(description="ISO-8601 UTC. 다시 넣어도 처음 값. 없으면 422")
+    reply_to: str = Field(description="결과를 넣을 스트림 `ai:res:{BE Pod}`")
+
+
+class QueueResult(BaseModel):
+    """AI → BE: XADD {reply_to}. 503은 AI가 다시 하므로 오지 않는다(504는 502로)"""
+    id: str = Field(description="요청과 같은 값")
+    status: Literal["200", "422", "502"] = Field(description="200 성공 / 422 요청 검증 실패 / 502 모델·형식·설정 오류·생성 시간 초과")
+    body: str | None = Field(None, description="200: 그 경로의 HTTP 응답 JSON 그대로")
+    detail: str | None = Field(None, description="422·502: 실패 이유(검증 오류 목록은 JSON 문자열)")
+    usage: str | None = Field(None, description="Usage JSON 문자열(다시 한 시도까지 합계). 모르면 없음")
