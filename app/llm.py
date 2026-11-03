@@ -35,7 +35,7 @@ client = boto3.client("bedrock-runtime", region_name=AWS_REGION, config=Config(
     retries={"mode": "adaptive", "total_max_attempts": int(os.getenv("LLM_MAX_ATTEMPTS", "1"))}))
 
 # 서버 전체 LLM 동시 호출 상한 (#37). 운영은 replica 1이라 프로세스 상한이 곧 전체 상한. 모든 LLM 호출이 chat()을 지난다
-# ponytail: 동시 8건 고정. 호출 한도에 걸리면 줄이고, 처리량이 모자라면 한도 상향 요청
+# ponytail: 동시 8건 고정. 계정 한도(Nova 분당 20)는 올릴 수 없어(SPEC ADR-0008), 몰림은 BE 큐 대기로 나타난다
 LLM_CONCURRENCY = int(os.getenv("LLM_CONCURRENCY", "8"))
 LLM_QUEUE = int(os.getenv("LLM_QUEUE", "32"))  # 자리를 기다리는 호출 수 상한. 넘치면 바로 503
 # 호출 1번이 자리를 기다리는 시간 상한(초). 요청 마감(읽기 제한 − 10초, 기획서 v1.65)이 더 가까우면 그때까지만.

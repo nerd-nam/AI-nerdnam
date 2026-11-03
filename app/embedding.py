@@ -26,7 +26,7 @@ from app.telemetry import tracer
 client = boto3.client("bedrock-runtime", region_name=AWS_REGION, config=Config(
     read_timeout=10, connect_timeout=2, max_pool_connections=8,
     retries={"mode": "adaptive", "total_max_attempts": int(os.getenv("EMBED_MAX_ATTEMPTS", "8"))}))
-# ponytail: 동시 8건 고정. 호출 한도(분당 요청 수)에 걸리면 줄이고, 처리량이 모자라면 한도 상향 요청
+# ponytail: 동시 8건 고정. 계정 한도(Titan 분당 60)는 올릴 수 없어(SPEC ADR-0008), 몰림은 BE 큐 대기로 나타난다
 # 이 풀이 서버 전체 임베딩 동시 호출 상한이다 (#37, replica 1)
 _pool = ThreadPoolExecutor(8)
 EMBED_QUEUE = int(os.getenv("EMBED_QUEUE", "64"))  # 이미 밀린 문장 수가 이만큼이면 새 요청은 바로 503 (요청 하나는 크기와 상관없이 받음)
