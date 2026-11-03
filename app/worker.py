@@ -230,6 +230,7 @@ async def _worker(r: redis.Redis, http: httpx.AsyncClient, streams: tuple[str, .
 
 
 def start(app) -> list[asyncio.Task]:
+    metrics.enable_queue_up()
     r = redis.Redis(host=os.getenv("AI_QUEUE_REDIS_HOST", "localhost"), port=int(os.getenv("AI_QUEUE_REDIS_PORT", "6379")),
                     username=os.getenv("AI_QUEUE_REDIS_USERNAME"), password=os.getenv("AI_QUEUE_REDIS_PASSWORD"),
                     socket_timeout=BLOCK_MS / 1000 + 5,  # 기본 5초는 BLOCK과 같아 빈 큐에서 읽기 시간 초과가 난다

@@ -3,7 +3,7 @@
 Bedrock 호출은 trace span 속성(#43)을 정하는 같은 자리에서 센다 → trace와 숫자가 맞는다.
 라벨은 유한한 값만 쓴다(모델 id·경로 템플릿·결과 분류). 회원·작업 id·프롬프트는 라벨에 넣지 않는다.
 """
-from prometheus_client import Counter, Gauge, Histogram, disable_created_metrics
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, disable_created_metrics
 
 disable_created_metrics()  # 지표마다 붙는 *_created 시계열은 쓰지 않는다 (시계열 수만 두 배)
 # ponytail: 단일 프로세스 레지스트리. uvicorn 워커를 2개 이상으로 늘리면 multiprocess 모드(PROMETHEUS_MULTIPROC_DIR)로 바꾼다
@@ -25,7 +25,8 @@ STAGE_SECONDS = Histogram("nerdnam_ai_stage_seconds", "단계별 대기 시간: 
                           buckets=(0.1, 0.5, 1, 3, 10, 30, 60, 120, 300, 600))
 QUEUE_LAG = Gauge("nerdnam_ai_queue_lag", "아직 안 꺼낸 메시지 수 (XLEN - pending)", ["stream", "model"])
 QUEUE_PENDING = Gauge("nerdnam_ai_queue_pending", "꺼냈지만 XACK 전인 메시지 수", ["stream", "model"])
-QUEUE_UP = Gauge("nerdnam_ai_queue_up", "큐 Redis 접속 여부 (작업자를 켰을 때만)")
+# 작업자를 켤 때만 등록한다(worker.start). 라벨 없는 Gauge는 등록하면 바로 0이 나와 "꺼짐"과 "끊김"이 구분되지 않는다
+QUEUE_UP = Gauge("nerdnam_ai_queue_up", "큐 Redis 접속 여부 (AI_QUEUE_ENABLED=true일 때만 나옴)", registry=None)
 INFLIGHT = Gauge("nerdnam_ai_inflight", "지금 기다리는 Bedrock 호출 수 (bedrock = 응답 대기)", ["model", "stage"])
 
 
@@ -39,3 +40,7 @@ def bedrock(operation: str, model: str, result: str, seconds: float, attempts: i
         TOKENS.labels(model, "input").inc(input_tokens)
     if output_tokens:
         TOKENS.labels(model, "output").inc(output_tokens)
+
+
+def enable_queue_up() -> None:
+    REGISTRY.register(QUEUE_UP)  # 접속 전이라 0에서 시작
