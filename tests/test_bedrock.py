@@ -126,6 +126,22 @@ def test_error_response_has_usage(monkeypatch):
     assert r.json() == {"detail": "llm output invalid", "usage": {"input_tokens": 100, "output_tokens": 10, "llm_calls": 2}}
 
 
+def test_empty_response_retried_once(monkeypatch):
+    # Nova가 가끔 토큰 0·출력 없음으로 답한다(INFRA #39). 형식 재생성을 쓰지 않고 같은 요청을 1번 더 보낸다
+    monkeypatch.setitem(state.models, "llm", "ready")
+    out = {"results": [{"id": 1, "verdict": "unmet", "evidence_chunk_ids": [], "reason": "관련 경험 없음"}]}
+    replies = iter([{"output": {"message": {"content": []}}, "usage": {"inputTokens": 0, "outputTokens": 0}},
+                    {"output": {"message": {"content": [{"toolUse": {"name": "out", "input": out}}]}},
+                     "usage": {"inputTokens": 50, "outputTokens": 5}}])
+    sent = []
+    monkeypatch.setattr(llm.client, "converse", lambda **req: sent.append(req) or next(replies))
+    sk = {"chunk_id": 1, "chunk_type": "skill", "text": "Kafka"}
+    r = c.post("/match", json={"requirements": [{"id": 1, "type": "required", "text": "Go", "candidates": [sk]}]})
+    assert r.status_code == 200
+    assert r.json()["usage"] == {"input_tokens": 50, "output_tokens": 5, "llm_calls": 2}
+    assert sent[0] == sent[1]  # 고쳐 달라는 말 없이 같은 요청
+
+
 def test_stub_usage_zero():
     r = c.post("/match", json={"requirements": [{"id": 1, "type": "required", "text": "Go", "candidates": []}]}).json()
     assert r["usage"] == {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0}

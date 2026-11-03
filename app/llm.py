@@ -196,6 +196,16 @@ def _release(call: asyncio.Future) -> None:
 
 
 async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048, temperature: float | None = None) -> str:
+    """빈 응답(토큰 0, 출력 없음)은 같은 요청을 1번 더 보낸다. INFRA #39에서 Nova 호출의 약 3%가 9~33초 뒤 빈 응답이었고,
+    다음 시도는 정상이었다. 형식 재생성(generate의 1회)과 따로 센다. 두 번째도 비면 ""를 돌려준다"""
+    for _ in range(2):
+        out, result = await _chat_once(messages, schema, max_tokens, temperature)
+        if result != "empty":
+            break
+    return out
+
+
+async def _chat_once(messages: list[dict], schema: dict | None, max_tokens: int, temperature: float | None) -> tuple[str, str]:
     await limiter.take(LLM_MODEL)  # 분당 한도 자리 (ADR-0009). 자리를 쥐기 전에 기다려 동시 호출 자리를 막지 않는다
     with _span("bedrock.queue", LLM_MODEL, SpanKind.INTERNAL) as q:  # 대기열(#37) 대기 시간이 trace에 보이게
         try:
@@ -225,23 +235,25 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
             metrics.bedrock("converse", LLM_MODEL, result_of(e), time.monotonic() - t, attempts_of(e))
             log.warning("bedrock llm %s %.1fs wait=%.1fs %s", LLM_MODEL, time.monotonic() - t, wait, _code(e))
             raise
+        blocks = r.get("output", {}).get("message", {}).get("content", [])
+        if schema:  # 도구 입력이 곧 출력 JSON. 도구 호출이 없으면(길이 초과 등) "" → 검증 실패로 1회 재시도
+            out = next((json.dumps(b["toolUse"]["input"], ensure_ascii=False) for b in blocks if "toolUse" in b), "")
+        else:  # 추론 블록(reasoningContent)이 먼저 올 수 있어 text 블록을 고른다
+            out = next((b["text"] for b in blocks if "text" in b), "")
         # 호출마다 한 줄 (본문·키는 남기지 않음). 읽기 시간 초과로 끊긴 호출의 토큰은 알 수 없어 합계에 빠진다
         u, retries = r.get("usage", {}), r.get("ResponseMetadata", {}).get("RetryAttempts", 0) + throttled
-        metrics.bedrock("converse", LLM_MODEL, "ok", time.monotonic() - t, retries + 1,
+        result, stop = "ok" if out or u.get("outputTokens") else "empty", r.get("stopReason", "")
+        metrics.bedrock("converse", LLM_MODEL, result, time.monotonic() - t, retries + 1,
                         u.get("inputTokens", 0), u.get("outputTokens", 0))
         if used is not None:
             used["llm_calls"] += throttled
             used["input_tokens"] += u.get("inputTokens", 0)
             used["output_tokens"] += u.get("outputTokens", 0)
-        s.set_attributes({"bedrock.result": "ok", "bedrock.attempts": retries + 1,
+        s.set_attributes({"bedrock.result": result, "bedrock.attempts": retries + 1, "gen_ai.response.finish_reasons": [stop],
                           "gen_ai.usage.input_tokens": u.get("inputTokens", 0), "gen_ai.usage.output_tokens": u.get("outputTokens", 0)})
-        log.info("bedrock llm %s %.1fs wait=%.1fs retries=%s ok in=%s out=%s", LLM_MODEL, time.monotonic() - t, wait,
-                 retries, u.get("inputTokens"), u.get("outputTokens"))
-    blocks = r["output"]["message"]["content"]
-    if schema:  # 도구 입력이 곧 출력 JSON. 도구 호출이 없으면(길이 초과 등) "" → 검증 실패로 1회 재시도
-        return next((json.dumps(b["toolUse"]["input"], ensure_ascii=False) for b in blocks if "toolUse" in b), "")
-    # 추론 블록(reasoningContent)이 먼저 올 수 있어 text 블록을 고른다
-    return next(b["text"] for b in blocks if "text" in b)
+        log.info("bedrock llm %s %.1fs wait=%.1fs retries=%s %s in=%s out=%s stop=%s", LLM_MODEL, time.monotonic() - t,
+                 wait, retries, result, u.get("inputTokens"), u.get("outputTokens"), stop)
+    return out, result
 
 
 def fits(messages: list[dict], max_tokens: int) -> bool:

@@ -236,7 +236,7 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | `AI_QUEUE_REDIS_PASSWORD` | (없음) | 큐 Redis 비밀번호 (Secret `nerdnam/dev/ai`) |
 | `AI_QUEUE_MAX_AGE` | `1800` | 큐에 넣은 지 이만큼(초) 지난 단계는 실행하지 않고 지움. BE가 결과를 기다리는 시간(20분)보다 넉넉히 길게 |
 
-503 `bedrock busy`는 API가 `GPU_UNAVAILABLE`로 1회 재시도합니다. 호출마다 로그 한 줄에 걸린 시간·대기(`wait`)·재시도 수(`retries`)·오류 코드(예: `ThrottlingException`)를 남깁니다.
+503 `bedrock busy`는 API가 `GPU_UNAVAILABLE`로 1회 재시도합니다. 호출마다 로그 한 줄에 걸린 시간·대기(`wait`)·재시도 수(`retries`)·오류 코드(예: `ThrottlingException`)를 남깁니다. LLM은 Bedrock이 멈춘 이유(`stop`, 예: `end_turn`·`tool_use`·`max_tokens`)도 남깁니다.
 
 ## 추적과 로그
 
@@ -250,7 +250,7 @@ BE에서 온 요청의 trace(OpenTelemetry)에 AI 처리와 Bedrock 호출이 �
 | --- | --- | --- |
 | `POST /match` 등 | 서버 | FastAPI 계측 |
 | `bedrock.queue` | 내부 | 동시 호출 자리(LLM) 또는 스레드 풀(임베딩)에서 기다린 시간. 대기열 초과면 `bedrock.result=busy` |
-| `bedrock.converse` / `bedrock.invoke_model` | 클라이언트 | `gen_ai.request.model`, `bedrock.result`(`ok`·`throttle`·`timeout`·`busy`·`error`), `error.type`, `bedrock.attempts`(실제 시도 횟수, throttle 재시도 포함), `gen_ai.usage.input_tokens`·`output_tokens`(응답 `usage`와 같은 값) |
+| `bedrock.converse` / `bedrock.invoke_model` | 클라이언트 | `gen_ai.request.model`, `bedrock.result`(`ok`·`empty`·`throttle`·`timeout`·`busy`·`error`), `gen_ai.response.finish_reasons`(Bedrock `stopReason`), `error.type`, `bedrock.attempts`(실제 시도 횟수, throttle 재시도 포함), `gen_ai.usage.input_tokens`·`output_tokens`(응답 `usage`와 같은 값) |
 
 Docker 이미지는 로그를 JSON 한 줄씩 stdout에 씁니다(`app/log.json`). 필드는 `time`·`level`·`logger`·`msg`이고, span 안에서 찍힌 줄에는 `trace_id`(32자리)·`span_id`(16자리)가 붙어 Grafana에서 trace로 이어집니다. 로컬 `uv run uvicorn`은 텍스트 로그 그대로입니다.
 
@@ -268,7 +268,7 @@ OTEL_SERVICE_NAME=ai OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 OTEL_EXPO
 
 | 지표 | 종류 | 라벨 |
 | --- | --- | --- |
-| `nerdnam_ai_bedrock_calls_total` | counter | `operation`(`converse`·`invoke_model`), `model`, `result`(`ok`·`throttle`·`timeout`·`error`) |
+| `nerdnam_ai_bedrock_calls_total` | counter | `operation`(`converse`·`invoke_model`), `model`, `result`(`ok`·`empty`·`throttle`·`timeout`·`error`). `empty` = 토큰 0·출력 없음, 같은 요청을 1번 더 보냄 |
 | `nerdnam_ai_bedrock_call_duration_seconds` | histogram | `operation`, `model` |
 | `nerdnam_ai_bedrock_attempts_total` | counter | `operation`, `model` (실제 시도 횟수: SDK 재시도 + throttle 재시도) |
 | `nerdnam_ai_bedrock_tokens_total` | counter | `model`, `direction`(`input`·`output`) — 응답 `usage`와 같은 값 |
