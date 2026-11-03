@@ -20,14 +20,35 @@ jobs:
     if: vars.AWS_CI_ROLE_ARN != ''
     runs-on: ubuntu-latest
     permissions: {id-token: write, contents: read}
+    outputs:
+      image: ${{ steps.build.outputs.image }}  # <registry>/nerdnam-dev/ai@sha256:… (INFRA 배포 PR 에 넘긴다)
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with: {role-to-assume: "${{ vars.AWS_CI_ROLE_ARN }}", aws-region: ap-northeast-2}
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-      # 태그는 commit SHA (ECR IMMUTABLE). 배포 정의(INFRA gitops/apps/images.yaml)에는 아래 digest를 넣는다
-      - run: |
+      # 태그는 commit SHA (ECR IMMUTABLE). 아래 infra-pr job 이 이 digest 로 INFRA gitops/apps/images.yaml PR 을 연다
+      - id: build
+        run: |
           ref=${{ steps.ecr.outputs.registry }}/nerdnam-dev/ai:${GITHUB_SHA}
           docker build -t "$ref" . && docker push "$ref"
-          docker inspect --format '{{index .RepoDigests 0}}' "$ref" | tee -a "$GITHUB_STEP_SUMMARY"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$ref")
+          echo "$digest" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "image=$digest" >> "$GITHUB_OUTPUT"
+
+  # ECR 에 올린 이미지로 INFRA gitops/apps/images.yaml 을 고치는 PR 을 연다(브랜치 deploy/ai). merge·배포(Argo sync)는 사람이 한다.
+  # 코드는 INFRA 에 있다: .github/workflows/image-pr.yml, docs/이미지-배포-PR.md. 조직 변수 INFRA_PR_APP_ID 가 없으면 건너뛴다.
+  infra-pr:
+    name: INFRA 배포 PR
+    needs: image
+    if: needs.image.outputs.image != '' && vars.INFRA_PR_APP_ID != ''
+    permissions:
+      contents: read
+    uses: nerd-nam/INFRA-nerdnam/.github/workflows/image-pr.yml@main
+    with:
+      app: ai
+      image: ${{ needs.image.outputs.image }}
+      app_id: ${{ vars.INFRA_PR_APP_ID }}
+    secrets:
+      app_private_key: ${{ secrets.INFRA_PR_APP_PRIVATE_KEY }}
