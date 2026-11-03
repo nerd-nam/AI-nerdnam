@@ -67,7 +67,7 @@ DESCRIPTION = f"""API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`
 - Redis 큐 경로(ADR-0009, `AI_QUEUE_ENABLED`): 경로가 아니라 스트림 메시지라 형식만 `components.schemas`의 `QueueRequest`(BE → AI)·`QueueResult`(AI → BE)에 둔다. 큐 경로에는 요청 마감이 없고, 503은 AI가 다시 하며 504는 502로 온다.
 """
 
-app = FastAPI(title="nerdnam-ai", version="0.4.1", description=DESCRIPTION, lifespan=lifespan)
+app = FastAPI(title="nerdnam-ai", version="0.5.0", description=DESCRIPTION, lifespan=lifespan)
 telemetry.setup(app)
 _route_openapi = app.openapi
 
