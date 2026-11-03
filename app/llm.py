@@ -102,7 +102,9 @@ def _converse(req: dict) -> tuple[dict, int]:
     throttled = closed = 0
     while True:
         try:
-            return client.converse(**req), throttled + closed
+            with metrics.INFLIGHT.labels(LLM_MODEL, "bedrock").track_inprogress():  # 지금 Bedrock 응답을 기다리는 호출
+                r = client.converse(**req)
+            return r, throttled + closed
         except ConnectionClosedError as e:
             if closed == LLM_CONN_RETRIES:
                 setattr(e, "throttle_retries", throttled + closed)  # noqa: B010 — 읽는 쪽은 attempts_of의 getattr
