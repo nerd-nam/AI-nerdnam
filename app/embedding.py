@@ -16,7 +16,7 @@ from botocore.config import Config
 from fastapi import HTTPException
 from opentelemetry import trace
 
-from app import llm, metrics
+from app import limiter, llm, metrics
 from app.config import AWS_REGION, EMBED_DIM, EMBED_MODEL_ID
 from app.telemetry import tracer
 
@@ -59,6 +59,7 @@ def _traced(text: str, submitted_ns: int) -> list[float]:
     """풀에서 기다린 시간(bedrock.queue)과 호출(bedrock.invoke_model)을 span으로. 문장 하나 = span 하나"""
     tracer.start_span("bedrock.queue", start_time=submitted_ns, attributes={"gen_ai.request.model": EMBED_MODEL_ID}).end()
     metrics.QUEUE_WAIT.labels("embed").observe((time.time_ns() - submitted_ns) / 1e9)
+    limiter.take_sync(EMBED_MODEL_ID)  # 분당 한도 자리 (ADR-0009). 문장 하나 = 호출 하나
     t = time.monotonic()
     with llm._span("bedrock.invoke_model", EMBED_MODEL_ID) as s:
         try:

@@ -15,7 +15,8 @@ def embed(req: EmbedRequest):  # 동기 함수: Bedrock 호출을 스레드풀�
         return EmbedResponse(embedding_model="stub", dim=EMBED_DIM, vectors=[unit for _ in req.items])
     if state.models["embedding"] != "ready":
         raise HTTPException(503, f"embedding {state.models['embedding']}")
-    budget = state.left(embedding.BUDGET)  # 요청 마감(읽기 제한 − 10초)이 더 가까우면 그때까지
+    # 요청 마감(읽기 제한 − 10초)이 더 가까우면 그때까지. 큐 경로는 마감이 없어 한도기가 정하는 만큼 기다린다
+    budget = state.left(embedding.BUDGET) if state.deadline.get() is not None else None
     try:
         vectors = embedding.encode(req.purpose, [(i.text, i.title) for i in req.items], budget=budget)
     except llm.ERRORS as e:
