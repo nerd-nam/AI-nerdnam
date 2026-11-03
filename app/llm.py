@@ -28,7 +28,7 @@ from app.config import AWS_REGION, LLM_MAX_MODEL_LEN, LLM_MODEL, LLM_SAMPLING, L
 from app.telemetry import tracer
 
 # SDK 재시도는 끈다(1회). SDK는 읽기 시간 초과·5xx도 다시 보내 한 호출이 LLM_TIMEOUT × 시도 수로 늘어나고,
-# 시간 초과는 다시 보내지 않는다는 규칙(C-04 504)과도 어긋난다. 호출 한도 초과(throttle)만 _converse()가 다시 보낸다.
+# 시간 초과는 다시 보내지 않는다는 규칙(C-04 504)과도 어긋난다. 호출 한도 초과(throttle)와 끊긴 연결만 _converse()가 다시 보낸다.
 # LLM_MAX_ATTEMPTS는 평가 스크립트처럼 몰아서 부를 때만 올린다
 client = boto3.client("bedrock-runtime", region_name=AWS_REGION, config=Config(
     read_timeout=LLM_TIMEOUT, connect_timeout=2, max_pool_connections=32,
@@ -43,6 +43,7 @@ LLM_QUEUE = int(os.getenv("LLM_QUEUE", "32"))  # 자리를 기다리는 호출 �
 LLM_QUEUE_WAIT = float(os.getenv("LLM_QUEUE_WAIT", "30"))
 LLM_THROTTLE_RETRIES = int(os.getenv("LLM_THROTTLE_RETRIES", "2"))  # 호출 한도 초과 때 다시 보내는 횟수
 THROTTLE_BACKOFF = 2.0  # 첫 쉼(초). 다시 보낼 때마다 두 배(2·4초) + 흔들기 0~1초
+LLM_CONN_RETRIES = 2  # 끊긴 keep-alive 연결(ConnectionClosedError)을 바로 다시 보내는 횟수 (#50)
 _slots = asyncio.Semaphore(LLM_CONCURRENCY)
 _waiting = 0
 
@@ -87,26 +88,36 @@ def result_of(e: Exception) -> str:
 
 
 def attempts_of(e: Exception) -> int:
-    """실패한 호출의 실제 시도 횟수(SDK 재시도 + throttle 재시도). 응답이 없는 실패(연결·읽기 시간 초과)는 SDK 몫을 1로 센다"""
+    """실패한 호출의 실제 시도 횟수(SDK 재시도 + _converse가 다시 보낸 횟수). 응답이 없는 실패(연결·읽기 시간 초과)는 SDK 몫을 1로 센다"""
     sdk = e.response.get("ResponseMetadata", {}).get("RetryAttempts", 0) + 1 if isinstance(e, ClientError) else 1
     return sdk + getattr(e, "throttle_retries", 0)
 
 
 def _converse(req: dict) -> tuple[dict, int]:
-    """Converse 호출. 호출 한도 초과(throttle)만 2·4초(+흔들기) 쉬고 다시 보낸다. 돌려준 int = throttle 재시도 횟수.
-    자리(_slots)를 쥔 채 쉬므로 한도에 걸린 동안은 동시 호출도 저절로 줄어든다. 쉬면 요청 마감을 넘길 때는 바로 503"""
-    for n in range(LLM_THROTTLE_RETRIES + 1):
-        delay = THROTTLE_BACKOFF * 2 ** n + random.random() * min(THROTTLE_BACKOFF, 1)
+    """Converse 호출. 돌려준 int = 다시 보낸 횟수(throttle + 끊긴 연결).
+    - 호출 한도 초과(throttle): 2·4초(+흔들기) 쉬고 다시. 자리(_slots)를 쥔 채 쉬므로 한도에 걸린 동안은 동시 호출도 저절로
+      줄어든다. 쉬면 요청 마감을 넘길 때는 바로 503
+    - 끊긴 연결(ConnectionClosedError, #50): 쉬던 사이 상대가 닫은 keep-alive 연결을 집은 것. 응답 전에 끊겨 쉬지 않고 바로
+      다시 보낸다(실패한 연결은 버려지고 다음·새 연결을 쓴다). 풀에 끊긴 연결이 여러 개일 수 있어 LLM_CONN_RETRIES번까지"""
+    throttled = closed = 0
+    while True:
         try:
-            return client.converse(**req), n
-        except ClientError as e:
-            left = state.left()
-            if n == LLM_THROTTLE_RETRIES or result_of(e) != "throttle" or (left is not None and left <= delay):
-                setattr(e, "throttle_retries", n)  # noqa: B010 — 타입 검사기용. 읽는 쪽은 attempts_of의 getattr
+            return client.converse(**req), throttled + closed
+        except ConnectionClosedError as e:
+            if closed == LLM_CONN_RETRIES:
+                setattr(e, "throttle_retries", throttled + closed)  # noqa: B010 — 읽는 쪽은 attempts_of의 getattr
                 raise
-            log.warning("bedrock llm throttle retry=%d", n + 1)
-        time.sleep(delay)
-    raise AssertionError("unreachable")  # 마지막 회차는 return 아니면 raise로 끝난다. 타입 검사기용
+            closed += 1
+            log.warning("bedrock llm connection closed retry=%d", closed)
+        except ClientError as e:
+            delay = THROTTLE_BACKOFF * 2 ** throttled + random.random() * min(THROTTLE_BACKOFF, 1)
+            left = state.left()
+            if throttled == LLM_THROTTLE_RETRIES or result_of(e) != "throttle" or (left is not None and left <= delay):
+                setattr(e, "throttle_retries", throttled + closed)  # noqa: B010
+                raise
+            throttled += 1
+            log.warning("bedrock llm throttle retry=%d", throttled)
+            time.sleep(delay)
 
 
 def mark_failed(span: Span, e: Exception) -> None:
@@ -207,7 +218,7 @@ async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int
         except ERRORS as e:
             mark_failed(s, e)
             if used is not None:
-                used["llm_calls"] += getattr(e, "throttle_retries", 0)  # 한도 초과로 다시 보낸 것도 호출(C-04 usage)
+                used["llm_calls"] += getattr(e, "throttle_retries", 0)  # 다시 보낸 것도 호출(C-04 usage)
             metrics.bedrock("converse", LLM_MODEL, result_of(e), time.monotonic() - t, attempts_of(e))
             log.warning("bedrock llm %s %.1fs wait=%.1fs %s", LLM_MODEL, time.monotonic() - t, wait, _code(e))
             raise
