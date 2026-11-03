@@ -166,6 +166,7 @@ AI-nerdnam/
 │   ├── embedding.py          Bedrock Titan 임베딩 호출(boto3) (서버와 evals가 같이 씀)
 │   ├── validators.py         LLM 출력 검증 (형식, 원문에 없는 수치, 인용 ID)
 │   ├── state.py              모델 상태 (loading/ready/error)
+│   ├── worker.py             Redis 큐 작업자 (ADR-0009): 꺼내서 라우터로 처리, 결과는 reply_to로
 │   ├── routers/              엔드포인트별 코드
 │   │   ├── restructure.py    /restructure
 │   │   ├── requirements.py   /requirements/extract
@@ -228,6 +229,11 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | `EMBED_QUEUE` | `64` | 이미 밀린 임베딩 문장 수가 이만큼이면 새 `/embed`는 바로 503. 동시 호출은 8건 고정 |
 | `EMBED_BUDGET` | `110` | `/embed` 1건이 재시도까지 쓰는 시간 상한(초). 읽기 제한 120초보다 10초 먼저 |
 | `EMBED_MAX_ATTEMPTS` | `8` | 임베딩 문장 1개의 SDK 시도 횟수(adaptive, 호출 한도에 맞춰 쉼). 요청 전체는 `EMBED_BUDGET` 안에서 끊김 |
+
+| `AI_QUEUE_ENABLED` | `false` | `true`면 Redis 큐 작업자를 띄움(SPEC ADR-0009). HTTP 경로는 그대로 받음 |
+| `AI_QUEUE_REDIS_HOST`·`_PORT`·`_USERNAME` | `localhost`·`6379`·(없음) | 큐 전용 Redis 접속 (values) |
+| `AI_QUEUE_REDIS_PASSWORD` | (없음) | 큐 Redis 비밀번호 (Secret `nerdnam/dev/ai`) |
+| `AI_QUEUE_MAX_AGE` | `1800` | 큐에 넣은 지 이만큼(초) 지난 단계는 실행하지 않고 지움. BE가 결과를 기다리는 시간(20분)보다 넉넉히 길게 |
 
 503 `bedrock busy`는 API가 `GPU_UNAVAILABLE`로 1회 재시도합니다. 호출마다 로그 한 줄에 걸린 시간·대기(`wait`)·재시도 수(`retries`)·오류 코드(예: `ThrottlingException`)를 남깁니다.
 

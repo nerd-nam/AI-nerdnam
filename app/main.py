@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.exceptions import HTTPException
 
-from app import embedding, llm, metrics, state, telemetry
+from app import embedding, llm, metrics, state, telemetry, worker
 from app.config import AI_MODE, DEADLINE_MARGIN, READ_LIMITS
 from app.routers import embed, gap_guide, guide, match, requirements, restructure
 from app.schemas import ErrorResponse, HealthResponse
@@ -49,9 +49,12 @@ async def keep_warm():
 async def lifespan(app: FastAPI):
     # 연결 확인은 백그라운드로: 그동안 /health 는 각 모델을 loading 으로 응답한다
     task = asyncio.create_task(keep_warm()) if AI_MODE == "real" else None
+    # 큐 작업자 (ADR-0009). 모델이 loading인 동안 꺼낸 단계는 503 → 기다렸다 다시 한다
+    workers = worker.start(app) if worker.ENABLED else []
     yield
-    if task:
-        task.cancel()
+    for t in [task, *workers]:
+        if t:
+            t.cancel()  # 처리 중이던 메시지는 pending으로 남아 다음 Pod가 회수한다
 
 
 DESCRIPTION = f"""API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`, 규칙은 SPEC 기획서 5.5 "AI 서버 공통 규칙".
@@ -81,7 +84,8 @@ _UNCOUNTED = {"/metrics", "/livez", "/readyz", "/health"}  # 주기적으로 들
 async def track_usage(request: Request, call_next):
     state.usage.set({"input_tokens": 0, "output_tokens": 0, "llm_calls": 0})
     t, status = time.monotonic(), 500
-    limit = READ_LIMITS.get(request.url.path)
+    queued = worker.HEADER in request.headers  # 큐 작업자가 부른 것: 마감 없음, 503·504는 작업자가 다시 하므로 HTTP 지표에서 뺌
+    limit = None if queued else READ_LIMITS.get(request.url.path)
     state.deadline.set(t + limit - DEADLINE_MARGIN if limit else None)  # 기획서 v1.65: 읽기 제한보다 먼저 끝낸다
     try:
         response = await call_next(request)
@@ -89,7 +93,7 @@ async def track_usage(request: Request, call_next):
         return response
     finally:
         route = getattr(request.scope.get("route"), "path", "other")  # 경로 템플릿 (매칭 안 되면 other)
-        if route not in _UNCOUNTED:
+        if route not in _UNCOUNTED and not queued:
             metrics.REQUESTS.labels(route, str(status)).inc()
             metrics.REQUEST_SECONDS.labels(route).observe(time.monotonic() - t)
 
