@@ -138,7 +138,7 @@ async def _call(http: httpx.AsyncClient, f: dict) -> dict | None:
 
 
 async def _done(r: redis.Redis, stream: str, msg_id: str) -> None:
-    async with r.pipeline(transaction=True) as p:
+    async with r.pipeline(transaction=False) as p:
         await p.xack(stream, GROUP, msg_id).xdel(stream, msg_id).execute()
 
 
@@ -150,7 +150,7 @@ async def _handle(r: redis.Redis, http: httpx.AsyncClient, stream: str, msg_id: 
     # 답할 곳은 있으니 422로 바로 끝낸다(BE가 20분 기다리지 않게). 모르는 op는 라우터 404 → 422
     if not f.get("op") or _enqueued(f) is None:
         log.error("queue malformed id=%s", f["id"])
-        async with r.pipeline(transaction=True) as p:
+        async with r.pipeline(transaction=False) as p:
             p.xadd(f["reply_to"], {"id": f["id"], "status": "422", "detail": "op or enqueued_at missing"})
             p.expire(f["reply_to"], RES_TTL)
             return await p.xack(stream, GROUP, msg_id).xdel(stream, msg_id).execute()
@@ -176,7 +176,9 @@ async def _handle(r: redis.Redis, http: httpx.AsyncClient, stream: str, msg_id: 
     if out is None:
         log.warning("queue give up id=%s age=%.0fs", f["id"], _age(f))
         return await _done(r, stream, msg_id)
-    async with r.pipeline(transaction=True) as p:
+    # 트랜잭션(MULTI/EXEC) 없이 한 번에 보낸다(ACL에 MULTI·EXEC 불필요). 순서가 곧 안전장치: 결과 → 완료 표시 → XACK·XDEL.
+    # 중간에 죽으면 남은 메시지를 회수하고, 완료 표시가 있으면 지우기만, 없으면 다시 실행한다(BE가 중복 결과를 버림)
+    async with r.pipeline(transaction=False) as p:
         p.xadd(f["reply_to"], out).expire(f["reply_to"], RES_TTL).set(run, "done", ex=DONE_TTL)
         await p.xack(stream, GROUP, msg_id).xdel(stream, msg_id).execute()
     log.info("queue done id=%s op=%s status=%s wait=%.1fs", f["id"], f["op"], out["status"], _age(f))
