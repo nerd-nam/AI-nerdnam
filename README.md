@@ -229,7 +229,6 @@ BE 레포에는 계약과 구현을 대조하는 테스트(`ApiAiContractTest`)�
 | `EMBED_QUEUE` | `64` | 이미 밀린 임베딩 문장 수가 이만큼이면 새 `/embed`는 바로 503. 동시 호출은 8건 고정 |
 | `EMBED_BUDGET` | `110` | `/embed` 1건이 재시도까지 쓰는 시간 상한(초). 읽기 제한 120초보다 10초 먼저 |
 | `EMBED_MAX_ATTEMPTS` | `8` | 임베딩 문장 1개의 SDK 시도 횟수(adaptive, 호출 한도에 맞춰 쉼). 요청 전체는 `EMBED_BUDGET` 안에서 끊김 |
-
 | `AI_QUEUE_ENABLED` | `false` | `true`면 Redis 큐 작업자를 띄움(SPEC ADR-0009). HTTP 경로는 그대로 받음 |
 | `AI_QUEUE_REDIS_HOST`·`_PORT`·`_USERNAME` | `localhost`·`6379`·(없음) | 큐 전용 Redis 접속 (values) |
 | `AI_QUEUE_REDIS_PASSWORD` | (없음) | 큐 Redis 비밀번호 (Secret `nerdnam/dev/ai`) |

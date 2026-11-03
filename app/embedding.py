@@ -43,7 +43,8 @@ def text_of(purpose: str, text: str, title: str | None = None) -> str:
 def _one(text: str) -> list[float]:
     t = time.monotonic()
     body = json.dumps({"inputText": text, "dimensions": EMBED_DIM, "normalize": True}, ensure_ascii=False)
-    r = client.invoke_model(modelId=EMBED_MODEL_ID, body=body, contentType="application/json", accept="application/json")
+    with metrics.INFLIGHT.labels(EMBED_MODEL_ID, "bedrock").track_inprogress():
+        r = client.invoke_model(modelId=EMBED_MODEL_ID, body=body, contentType="application/json", accept="application/json")
     if n := r.get("ResponseMetadata", {}).get("RetryAttempts", 0):
         log.warning("bedrock embed retries=%d", n)  # 대개 호출 한도(Throttling)로 다시 보낸 것
     out = json.loads(r["body"].read())

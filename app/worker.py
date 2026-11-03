@@ -14,37 +14,56 @@ import json
 import logging
 import os
 import random
+import secrets
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 import httpx
 import redis.asyncio as redis
+from opentelemetry import propagate
 from redis.exceptions import ResponseError
 
+from app import metrics
+from app.config import EMBED_MODEL_ID, LLM_MODEL
+from app.telemetry import tracer
+
 ENABLED = os.getenv("AI_QUEUE_ENABLED", "false") == "true"
-HEADER = "x-nerdnam-queue"  # 작업자가 라우터를 부를 때 붙인다 → 요청 마감 없음, HTTP 요청 지표에서 뺌 (main.py)
+# 작업자가 라우터를 부를 때 붙인다 → 요청 마감 없음, 다시 할 503은 HTTP 요청 지표에서 뺌 (main.py).
+# 값은 시작할 때 만든 무작위 값이라 밖에서 보낸 헤더로는 마감을 끌 수 없다
+HEADER, TOKEN = "x-nerdnam-queue", secrets.token_hex(16)
 GROUP = "ai"
 STREAMS = ("ai:req:llm", "ai:req:embed", "ai:req:embed-bg")
+MODEL = {"ai:req:llm": LLM_MODEL, "ai:req:embed": EMBED_MODEL_ID, "ai:req:embed-bg": EMBED_MODEL_ID}  # 지표 model 라벨
+WATCH = 15  # 밀린 작업 지표 갱신 주기(초) = Prometheus 수집 주기
 # 작업자마다 꺼내는 스트림(앞이 먼저). 수가 곧 스트림별 동시 처리 상한. 문서 임베딩 작업자는 사용자가 기다리는 embed를 먼저 본다
 WORKERS = [("ai:req:llm",)] * 8 + [("ai:req:embed",)] * 2 + [("ai:req:embed", "ai:req:embed-bg")]
 BLOCK_MS = 5000  # 새 메시지를 기다리는 시간. 그사이 회수할 것이 있는지 다시 본다
 CLAIM_IDLE_MS = 60_000  # 이만큼 손대지 않은 pending은 죽은 작업자 몫으로 보고 가져간다
-HEARTBEAT = 20  # 처리 중 idle 초기화·선점 연장 주기(초). CLAIM_IDLE·RUN_TTL보다 충분히 짧게
-RUN_TTL = 60  # 처리 중 선점 키 만료(초). 작업자가 죽으면 이 뒤에 다시 실행할 수 있다
+HEARTBEAT = 15  # 처리 중 idle 초기화·선점 연장 주기(초). RUN_TTL보다 충분히 짧게
+# 처리 중 선점 키 만료(초). 작업자가 죽으면 이 뒤에 다시 실행할 수 있다. CLAIM_IDLE보다 짧아야 회수한 쪽이 선점할 수 있다
+RUN_TTL = 40
 # 끝난 id를 기억하는 시간(초). BE가 결과를 기다리는 시간(wait-timeout 20분)보다 넉넉히 길게: 그 안의 중복은 건너뜀
 DONE_TTL = 1800
 RES_TTL = 3600  # 결과 스트림 키 만료(초). BE Pod가 읽지 못하고 내려가도 키가 남지 않게 쓸 때마다 다시 건다
 # enqueued_at이 이보다 오래면 BE가 이미 포기(TIMEOUT)했으므로 건너뜀. wait-timeout이 바뀌어도 살아 있는 작업을 버리지 않게 넉넉히
 MAX_AGE = float(os.getenv("AI_QUEUE_MAX_AGE", "1800"))
-RETRY_BASE = 5.0  # 503·504 뒤 다시 하기까지 쉬는 시간(초). 2배씩, 최대 60초
+RETRY_BASE = 5.0  # 503 뒤 다시 하기까지 쉬는 시간(초). 2배씩, 최대 60초
+# 모델 연결 확인 실패(키·권한·설정)는 기다려도 풀리지 않는다 → 502로 끝낸다 (ADR-0009 결정 6)
+_PERMANENT_503 = {"llm error", "embedding error"}
 log = logging.getLogger("uvicorn.error")
 
 
-def _age(f: dict) -> float:
+def _enqueued(f: dict) -> float | None:
+    """enqueued_at(ISO-8601)의 epoch 초. 시간대가 없으면 UTC로 읽는다. 없거나 못 읽으면 None"""
     try:
-        return time.time() - datetime.fromisoformat(f["enqueued_at"]).timestamp()
-    except (KeyError, ValueError):
-        return 0.0
+        t = datetime.fromisoformat(f["enqueued_at"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return (t if t.tzinfo else t.replace(tzinfo=UTC)).timestamp()
+
+
+def _age(f: dict) -> float:
+    return time.time() - (_enqueued(f) or time.time())
 
 
 async def _groups(r: redis.Redis) -> None:
@@ -63,10 +82,9 @@ async def _next(r: redis.Redis, streams: tuple[str, ...], consumer: str):
         _, claimed, *_ = await r.xautoclaim(s, GROUP, consumer, CLAIM_IDLE_MS, count=1)
         if claimed:
             return s, *claimed[0]
-        if got := await r.xreadgroup(GROUP, consumer, {s: ">"}, count=1):
+        # 마지막 스트림만 기다린다. 문서 임베딩 작업자가 기다리는 사이 온 embed는 embed 전용 작업자 2개가 먼저 받는다
+        if got := await r.xreadgroup(GROUP, consumer, {s: ">"}, count=1, block=BLOCK_MS if s == streams[-1] else None):
             return s, *got[0][1][0]
-    if got := await r.xreadgroup(GROUP, consumer, {streams[-1]: ">"}, count=1, block=BLOCK_MS):
-        return streams[-1], *got[0][1][0]
     return None
 
 
@@ -75,6 +93,8 @@ async def _heartbeat(r: redis.Redis, stream: str, consumer: str, msg_id: str, ru
         await asyncio.sleep(HEARTBEAT)
         try:
             await r.xclaim(stream, GROUP, consumer, 0, [msg_id], justid=True)
+            # ponytail: 누가 잡았는지 보지 않고 연장. 멈췄다 깨어난 작업자가 남의 선점을 덮어쓸 수 있다(ai Pod 1개면 사실상 없음).
+            # ai를 2대 이상으로 늘리면 "값이 내 이름일 때만"(Lua 또는 Redis 8.4+ SET IFEQ)으로 바꾼다. done으로 바꿀 때도 같다
             await r.set(run, consumer, xx=True, ex=RUN_TTL)
         except Exception:
             log.warning("queue heartbeat failed id=%s", msg_id, exc_info=True)
@@ -83,7 +103,7 @@ async def _heartbeat(r: redis.Redis, stream: str, consumer: str, msg_id: str, ru
 async def _call(http: httpx.AsyncClient, f: dict) -> dict | None:
     """라우터를 불러 결과 메시지 필드를 만든다. 503·504는 쉬었다 다시. BE가 포기할 만큼 오래되면 None"""
     usage, seen, n = {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0}, False, 0
-    headers = {"content-type": "application/json", HEADER: "1"}
+    headers = {"content-type": "application/json", HEADER: TOKEN}
     if f.get("traceparent"):
         headers["traceparent"] = f["traceparent"]  # BE trace에 이어 붙인다 (FastAPI 계측이 읽음)
     while True:
@@ -96,7 +116,8 @@ async def _call(http: httpx.AsyncClient, f: dict) -> dict | None:
             seen = True  # 다시 한 것까지 실패 전까지 쓴 토큰을 합친다
             for k in usage:
                 usage[k] += data["usage"].get(k, 0)
-        if res.status_code not in (503, 504):
+        # 503만 다시 한다(대기열·호출 한도·연결 확인 중). 504는 Bedrock 생성 시간 초과라 다시 보내도 같다(C-04) → 502
+        if res.status_code != 503 or (isinstance(data, dict) and data.get("detail") in _PERMANENT_503):
             break
         if _age(f) > MAX_AGE:
             return None
@@ -105,7 +126,7 @@ async def _call(http: httpx.AsyncClient, f: dict) -> dict | None:
         log.warning("queue retry id=%s status=%d in %.0fs", f.get("id"), res.status_code, delay)
         await asyncio.sleep(delay)
     code = res.status_code
-    out = {"id": f["id"], "status": "200" if code < 300 else "422" if code < 500 else "502"}
+    out = {"id": f["id"], "status": "200" if code < 300 else "422" if code < 500 else "502"}  # 큐 경로는 200·422·502뿐
     if code < 300:
         out["body"] = res.text
     else:
@@ -126,18 +147,27 @@ async def _handle(r: redis.Redis, http: httpx.AsyncClient, stream: str, msg_id: 
     if not f or not f.get("id") or not f.get("reply_to"):
         log.error("queue drop malformed message %s %s", stream, msg_id)  # 답할 곳이 없다
         return await _done(r, stream, msg_id)
-    if not f.get("op"):  # 답할 곳은 있으니 422로 바로 끝낸다(BE가 20분 기다리지 않게). 모르는 op는 라우터 404 → 422
+    # 답할 곳은 있으니 422로 바로 끝낸다(BE가 20분 기다리지 않게). 모르는 op는 라우터 404 → 422
+    if not f.get("op") or _enqueued(f) is None:
         log.error("queue malformed id=%s", f["id"])
         async with r.pipeline(transaction=True) as p:
-            p.xadd(f["reply_to"], {"id": f["id"], "status": "422", "detail": "op missing"}).expire(f["reply_to"], RES_TTL)
+            p.xadd(f["reply_to"], {"id": f["id"], "status": "422", "detail": "op or enqueued_at missing"})
+            p.expire(f["reply_to"], RES_TTL)
             return await p.xack(stream, GROUP, msg_id).xdel(stream, msg_id).execute()
     if (age := _age(f)) > MAX_AGE:  # 결과를 보내지 않는다: BE는 이미 TIMEOUT으로 끝냈다
         log.warning("queue skip id=%s age=%.0fs", f["id"], age)
         return await _done(r, stream, msg_id)
     run = f"ai:run:{f['id']}"
-    if not await r.set(run, consumer, nx=True, ex=RUN_TTL):
-        log.info("queue skip duplicate id=%s", f["id"])  # 실행 중이거나 끝남. 원래 실행이 결과를 보낸다
-        return await _done(r, stream, msg_id)
+    # SET NX GET(Redis 7): 비어 있으면 선점하고 None, 있으면 그 값. ACL은 SET 하나로 된다
+    if (held := await r.set(run, consumer, nx=True, ex=RUN_TTL, get=True)) is not None:
+        if held == "done":  # 이미 끝나 결과를 보냄
+            log.info("queue skip done id=%s", f["id"])
+            return await _done(r, stream, msg_id)
+        # 다른 작업자가 실행 중이거나, 죽은 작업자의 선점이 아직 남음 → 지우지 않고 pending으로 둔다.
+        # CLAIM_IDLE 뒤 다시 회수해 보고, 그때 끝났으면 지우고 선점이 풀렸으면 실행한다
+        log.info("queue busy id=%s", f["id"])
+        return None
+    _queued(stream, f)
     beat = asyncio.create_task(_heartbeat(r, stream, consumer, msg_id, run))
     try:
         out = await _call(http, f)
@@ -150,6 +180,33 @@ async def _handle(r: redis.Redis, http: httpx.AsyncClient, stream: str, msg_id: 
         p.xadd(f["reply_to"], out).expire(f["reply_to"], RES_TTL).set(run, "done", ex=DONE_TTL)
         await p.xack(stream, GROUP, msg_id).xdel(stream, msg_id).execute()
     log.info("queue done id=%s op=%s status=%s wait=%.1fs", f["id"], f["op"], out["status"], _age(f))
+
+
+def _queued(stream: str, f: dict) -> None:
+    """큐에서 기다린 시간: 지표 stage=queue와 span queue.wait(BE trace에 이어 붙임, 시작 = enqueued_at)"""
+    start = _enqueued(f) or time.time()
+    metrics.STAGE_SECONDS.labels(MODEL[stream], "queue").observe(time.time() - start)
+    ctx = propagate.extract({"traceparent": f["traceparent"]}) if f.get("traceparent") else None
+    tracer.start_span("queue.wait", context=ctx, start_time=int(start * 1e9),
+                      attributes={"messaging.destination.name": stream, "gen_ai.request.model": MODEL[stream]}).end()
+
+
+async def _watch(r: redis.Redis) -> None:
+    """밀린 작업 지표. 처리한 메시지는 지우므로 XLEN = 안 꺼낸 것 + pending (XINFO GROUPS의 lag는 XDEL 뒤 null일 수 있어 안 씀)"""
+    while True:
+        try:
+            for s in STREAMS:
+                n = await r.xlen(s)
+                pending = next((g["pending"] for g in await r.xinfo_groups(s) if g["name"] == GROUP), 0)
+                name = s.removeprefix("ai:req:")
+                metrics.QUEUE_PENDING.labels(name, MODEL[s]).set(pending)
+                metrics.QUEUE_LAG.labels(name, MODEL[s]).set(n - pending)
+            metrics.QUEUE_UP.set(1)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            metrics.QUEUE_UP.set(0)  # 끊김·소비자 그룹 아직 없음. 작업자가 다시 접속·생성한다
+        await asyncio.sleep(WATCH)
 
 
 async def _worker(r: redis.Redis, http: httpx.AsyncClient, streams: tuple[str, ...], consumer: str) -> None:
@@ -178,4 +235,5 @@ def start(app) -> list[asyncio.Task]:
     http = httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
                              base_url="http://queue", timeout=None)
     pod = os.getenv("HOSTNAME", "ai")
-    return [asyncio.create_task(_worker(r, http, streams, f"{pod}-{i}")) for i, streams in enumerate(WORKERS)]
+    return [asyncio.create_task(_watch(r)),
+            *(asyncio.create_task(_worker(r, http, streams, f"{pod}-{i}")) for i, streams in enumerate(WORKERS))]

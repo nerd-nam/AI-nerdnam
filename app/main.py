@@ -55,6 +55,7 @@ async def lifespan(app: FastAPI):
     for t in [task, *workers]:
         if t:
             t.cancel()  # 처리 중이던 메시지는 pending으로 남아 다음 Pod가 회수한다
+    await asyncio.gather(*workers, return_exceptions=True)
 
 
 DESCRIPTION = f"""API ↔ AI 계약 (C-04). 출처는 AI 레포 `app/schemas.py`, 규칙은 SPEC 기획서 5.5 "AI 서버 공통 규칙".
@@ -84,7 +85,7 @@ _UNCOUNTED = {"/metrics", "/livez", "/readyz", "/health"}  # 주기적으로 들
 async def track_usage(request: Request, call_next):
     state.usage.set({"input_tokens": 0, "output_tokens": 0, "llm_calls": 0})
     t, status = time.monotonic(), 500
-    queued = worker.HEADER in request.headers  # 큐 작업자가 부른 것: 마감 없음, 503·504는 작업자가 다시 하므로 HTTP 지표에서 뺌
+    queued = request.headers.get(worker.HEADER) == worker.TOKEN  # 큐 작업자가 부른 것: 마감 없음
     limit = None if queued else READ_LIMITS.get(request.url.path)
     state.deadline.set(t + limit - DEADLINE_MARGIN if limit else None)  # 기획서 v1.65: 읽기 제한보다 먼저 끝낸다
     try:
@@ -93,7 +94,7 @@ async def track_usage(request: Request, call_next):
         return response
     finally:
         route = getattr(request.scope.get("route"), "path", "other")  # 경로 템플릿 (매칭 안 되면 other)
-        if route not in _UNCOUNTED and not queued:
+        if route not in _UNCOUNTED and not (queued and status == 503):  # 큐 경로 503은 작업자가 다시 하므로 실패로 세지 않음
             metrics.REQUESTS.labels(route, str(status)).inc()
             metrics.REQUEST_SECONDS.labels(route).observe(time.monotonic() - t)
 
