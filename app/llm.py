@@ -23,7 +23,7 @@ from fastapi import HTTPException
 from opentelemetry.trace import Span, SpanKind, StatusCode
 from pydantic import BaseModel, ValidationError
 
-from app import metrics, state
+from app import limiter, metrics, state
 from app.config import AWS_REGION, LLM_MAX_MODEL_LEN, LLM_MODEL, LLM_SAMPLING, LLM_TIMEOUT
 from app.telemetry import tracer
 
@@ -196,6 +196,7 @@ def _release(call: asyncio.Future) -> None:
 
 
 async def chat(messages: list[dict], schema: dict | None = None, max_tokens: int = 2048, temperature: float | None = None) -> str:
+    await limiter.take(LLM_MODEL)  # 분당 한도 자리 (ADR-0009). 자리를 쥐기 전에 기다려 동시 호출 자리를 막지 않는다
     with _span("bedrock.queue", LLM_MODEL, SpanKind.INTERNAL) as q:  # 대기열(#37) 대기 시간이 trace에 보이게
         try:
             wait = await _acquire()
