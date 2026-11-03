@@ -6,6 +6,7 @@ import time
 import pytest
 from botocore.exceptions import (
     ClientError,
+    ConnectionClosedError,
     EndpointConnectionError,
     NoCredentialsError,
     ReadTimeoutError,
@@ -157,3 +158,40 @@ def test_embed_over_budget_is_503(monkeypatch):
     assert c.post("/embed", json={"purpose": "query", "items": [{"text": "a"}] * 20}).status_code == 503
     time.sleep(0.4)  # 이미 시작한 호출이 끝나면 밀린 수가 0으로 돌아온다 (취소된 것 포함)
     assert embedding._pending == 0
+
+
+MATCH_ONE = {"requirements": [{"id": 1, "type": "required", "text": "Go",
+                               "candidates": [{"chunk_id": 1, "chunk_type": "skill", "text": "Go"}]}]}
+OK_MATCH = {"output": {"message": {"content": [{"toolUse": {"name": "out", "input": {"results": [
+    {"id": 1, "verdict": "unmet", "evidence_chunk_ids": [], "reason": "관련 경험 없음"}]}}}]}},
+    "usage": {"inputTokens": 10, "outputTokens": 1}}
+
+
+def test_closed_connection_retried_at_once(monkeypatch):
+    # #50: 쉬던 사이 닫힌 keep-alive 연결을 집으면 0초 만에 ConnectionClosedError → 쉬지 않고 바로 다시 보낸다
+    monkeypatch.setitem(state.models, "llm", "ready")
+    calls = []
+
+    def converse(**req):
+        calls.append(1)
+        if len(calls) <= llm.LLM_CONN_RETRIES:
+            raise ConnectionClosedError(endpoint_url="x")
+        return OK_MATCH
+    monkeypatch.setattr(llm.client, "converse", converse)
+    t = time.monotonic()
+    r = c.post("/match", json=MATCH_ONE)
+    assert r.status_code == 200 and len(calls) == llm.LLM_CONN_RETRIES + 1
+    assert time.monotonic() - t < 1  # throttle처럼 쉬지 않음
+
+
+def test_closed_connection_gives_up_as_503(monkeypatch):
+    monkeypatch.setitem(state.models, "llm", "ready")
+    calls = []
+
+    def converse(**req):
+        calls.append(1)
+        raise ConnectionClosedError(endpoint_url="x")
+    monkeypatch.setattr(llm.client, "converse", converse)
+    r = c.post("/match", json=MATCH_ONE)
+    assert r.status_code == 503 and r.json()["detail"] == "bedrock unreachable"
+    assert len(calls) == llm.LLM_CONN_RETRIES + 1
