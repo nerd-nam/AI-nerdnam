@@ -3,6 +3,7 @@ import asyncio
 import json
 import time
 from datetime import UTC, datetime
+from typing import get_args
 
 import fakeredis
 import httpx
@@ -10,6 +11,7 @@ from botocore.exceptions import ReadTimeoutError
 
 from app import llm, state, worker
 from app.main import app
+from app.schemas import QueueOp, QueueRequest, QueueResult
 
 MATCH = {"requirements": [{"id": 1, "type": "required", "text": "Kafka 운영",
                            "candidates": [{"chunk_id": 1, "chunk_type": "skill", "text": "Kafka"}]}]}
@@ -46,7 +48,15 @@ def test_result_goes_to_reply_to_and_request_is_deleted(monkeypatch):
         assert "results" in json.loads(res[0]["body"]) and json.loads(res[0]["usage"])["llm_calls"] == 0  # stub
         assert await r.xlen("ai:req:llm") == 0  # XACK + XDEL
         assert await r.ttl("ai:res:be-1") > 0 and await r.get("ai:run:match:1") == "done"
+        QueueResult.model_validate(res[0])  # 계약 C-04 메시지 형식
     asyncio.run(go())
+
+
+def test_contract_messages_match_worker_and_routes():
+    """C-04 QueueRequest의 op = 지금 POST 경로, 테스트 메시지가 형식에 맞음"""
+    posts = {p.lstrip("/") for p, ops in app.openapi()["paths"].items() if "post" in ops}
+    assert set(get_args(QueueOp)) == posts
+    QueueRequest.model_validate(msg())
 
 
 def test_same_id_runs_once_and_old_message_is_skipped(monkeypatch):
